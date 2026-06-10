@@ -86,6 +86,10 @@ export class Application {
   @Column({ unique: true })
   reference: string; // e.g. AP-7743
 
+  // secret for anonymous save-and-resume during onboarding
+  @Column({ nullable: true })
+  resumeToken?: string;
+
   @ManyToOne(() => DriverProfile, { onDelete: 'CASCADE', nullable: true })
   driver?: DriverProfile;
 

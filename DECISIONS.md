@@ -37,3 +37,21 @@ Running log of notable choices made while building, per the brief's instruction 
   real cadastral polygons later.
 - Driver demo coordinates map the prototype's abstract 0–100 zone grid onto real Bogotá lon/lat so
   the live map shows believable positions.
+
+## Phase 2
+- **OCR auto-fill via OpenRouter** (user-requested). Uploaded documents are sent to an OpenRouter
+  vision model (`OPENROUTER_MODEL`, default `google/gemini-2.0-flash-001`) which returns structured
+  fields (name, cédula, plate, brand, year, expiry dates…). The applicant uploads license/SOAT/
+  registration and the form pre-fills, minimizing typing. **Graceful degradation:** with no
+  `OPENROUTER_API_KEY` (or a non-image/PDF upload) OCR is skipped and manual entry still works — the
+  platform keeps its "boots with no paid account" guarantee. The OCR service never throws.
+- **Anonymous onboarding via resume token.** Drivers have no account until they submit, so an
+  Application carries a random `resumeToken`; the public onboarding endpoints (`@Public`) are guarded
+  by that token instead of a JWT. The driver User + DriverProfile + Vehicle + Documents are created
+  atomically at submit, gated `securityCleared=false / eligible=false` until the workflow passes.
+- **Uploads live in the draft until submit.** The `Document` entity requires a driver FK that doesn't
+  exist pre-submit, so uploaded file refs + OCR results are kept in `Application.draft.documents`;
+  real `Document` rows are created on submit. Avoids an extra nullable-owner schema.
+- **OCR only fills empty fields** — it never clobbers a value the applicant already typed; expiry/
+  issue dates are recorded per document.
+- Local-disk storage behind a `StorageService` interface (S3-swappable); files under `./storage`.

@@ -7,7 +7,9 @@ coverage/
 .env.local
 .DS_Store
 uploads/
-storage/
+# runtime upload dirs only — NOT the src/storage module
+/storage/
+apps/api/storage/
 *.tsbuildinfo
 .vite/
 .cache/

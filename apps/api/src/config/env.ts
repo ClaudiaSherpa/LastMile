@@ -48,4 +48,11 @@ export const env = {
     driver: process.env.STORAGE_DRIVER ?? 'local',
     localDir: process.env.STORAGE_LOCAL_DIR ?? './storage',
   },
+  ocr: {
+    // OpenRouter vision model used to auto-fill onboarding fields from uploaded
+    // documents. Empty key => OCR is skipped gracefully (manual entry still works).
+    apiKey: process.env.OPENROUTER_API_KEY ?? '',
+    baseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
+    model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.0-flash-001',
+  },
 };
