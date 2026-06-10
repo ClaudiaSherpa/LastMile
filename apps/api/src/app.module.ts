@@ -10,6 +10,7 @@ import { WorkflowModule } from './workflow/workflow.module';
 import { ComplianceModule } from './compliance/compliance.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { TenderModule } from './tenders/tender.module';
+import { TrackingModule } from './tracking/tracking.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
@@ -25,6 +26,7 @@ import { AppController } from './app.controller';
     WorkflowModule,
     ComplianceModule,
     TenderModule,
+    TrackingModule,
   ],
   controllers: [AppController],
   providers: [

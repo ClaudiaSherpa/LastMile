@@ -82,4 +82,5 @@ export const api = {
   freight: () => request<any[]>('/freight'),
   createFreight: (body: any) => request<any>('/freight', { method: 'POST', body: JSON.stringify(body) }),
   broadcast: (id: string) => request<any>(`/freight/${id}/broadcast`, { method: 'POST' }),
+  live: () => request<any[]>('/tracking/live'),
 };

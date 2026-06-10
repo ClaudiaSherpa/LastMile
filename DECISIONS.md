@@ -111,3 +111,21 @@ Running log of notable choices made while building, per the brief's instruction 
 - Realtime is a Socket.IO hub (rooms `ops`, `driver:<id>`, `delivery:<id>`); REST stays the source of
   truth + RBAC, the socket is a push channel. Ops Freight screen creates/broadcasts freight and shows
   a live tender feed; Vite proxies `/socket.io` (ws) to the API.
+
+## Phase 6
+- **Server-side GPS simulator** (`TrackingSimulator`, `TRACKING_SIMULATE=on`) moves active-delivery
+  drivers toward their dropoff and jitters idle drivers, emitting `driver.location` every 2.5s — so the
+  live map and consignee page move with **no real device**. Real device pings hit the same
+  `POST /tracking/ping` path; set `TRACKING_SIMULATE=off` to rely on them. Pings persist as
+  `LocationPing` rows (track per delivery for audit/ETA).
+- **Consignee privacy:** the public `GET /track/:token` view exposes only the driver's *first* name +
+  vehicle/plate/tier and live position — never full PII. Gated solely by the opaque per-delivery
+  `trackingToken` (no account), matching the link/OTP model.
+- **Delivery lifecycle** (`assigned → en_route_pickup → picked_up → en_route → delivered/failed`)
+  drives driver status (idle on completion) and freight status (completed/cancelled); every transition
+  is audited and pushed to `ops` + `delivery:<id>`.
+- **Map projection** is a shared Bogotá bounding-box → 0–100% transform on the schematic `.map-grid`
+  canvas (Mapbox stays swap-able behind `VITE_MAPBOX_TOKEN`). The driver dot animates via CSS
+  transition between WS updates so motion looks smooth despite a 2.5s tick.
+- Consignee tracking is served by the driver PWA at `/?track=<token>` (the link target), so one app
+  covers both onboarding and tracking; it joins the `delivery:<id>` room for live updates.

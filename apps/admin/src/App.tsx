@@ -78,11 +78,20 @@ function Login({ onDone }: { onDone: () => void }) {
 // ── ops shell ───────────────────────────────────────────────────
 const TABS = [
   ['dashboard', 'Panel', 'Dashboard'],
+  ['map', 'Mapa en vivo', 'Live map'],
   ['approvals', 'Aprobaciones', 'Approvals'],
   ['compliance', 'Cumplimiento', 'Compliance'],
   ['freight', 'Fletes', 'Freight'],
   ['drivers', 'Conductores', 'Drivers'],
 ] as const;
+
+// Bogotá bounding box -> 0..100% map space
+const BOGOTA = { minLng: -74.2, maxLng: -74.0, minLat: 4.55, maxLat: 4.78 };
+const toXY = (lng: number, lat: number) => ({
+  x: Math.max(0, Math.min(100, ((lng - BOGOTA.minLng) / (BOGOTA.maxLng - BOGOTA.minLng)) * 100)),
+  y: Math.max(0, Math.min(100, (1 - (lat - BOGOTA.minLat) / (BOGOTA.maxLat - BOGOTA.minLat)) * 100)),
+});
+const tierColor: Record<string, string> = { elite: 'var(--brand)', preferente: 'var(--blue)', estandar: 'var(--ink-500)', nuevo: 'var(--amber)' };
 
 function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
   const { t } = useI18n();
@@ -125,6 +134,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
         </div>
         <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           {tab === 'dashboard' && <Dashboard />}
+          {tab === 'map' && <LiveMap />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'compliance' && <Compliance />}
           {tab === 'freight' && <FreightScreen />}
@@ -350,6 +360,52 @@ function Compliance() {
           </tbody>
         </table>
         {!rows.length && <div style={{ padding: 16, color: 'var(--ink-500)' }}>{t('Sin documentos próximos a vencer', 'No documents expiring soon')}</div>}
+      </div>
+    </div>
+  );
+}
+
+function LiveMap() {
+  const { t } = useI18n();
+  const [drivers, setDrivers] = useState<Record<string, any>>({});
+  const { connected } = useRoom('ops');
+
+  useEffect(() => {
+    api.live().then((list) => {
+      const m: Record<string, any> = {};
+      list.forEach((d) => (m[d.id] = d));
+      setDrivers(m);
+    }).catch(() => {});
+  }, []);
+
+  useEvent('driver.location', useCallback((p: any) => {
+    setDrivers((prev) => ({ ...prev, [p.driverId]: { ...(prev[p.driverId] || { id: p.driverId }), lng: p.lng, lat: p.lat } }));
+  }, []));
+
+  const list = Object.values(drivers).filter((d: any) => d.lng != null);
+  const moving = list.filter((d: any) => d.status === 'enroute' || d.status === 'delivering').length;
+
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span className="badge badge-brand">{list.length} {t('conductores', 'drivers')}</span>
+        <span className="badge badge-blue">{moving} {t('en movimiento', 'moving')}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
+          <span className="mono" style={{ color: 'var(--ink-500)' }}>{connected ? 'WS' : '—'}</span>
+        </span>
+      </div>
+      <div className="card map-grid" style={{ position: 'relative', height: 560, overflow: 'hidden' }}>
+        {list.map((d: any) => {
+          const { x, y } = toXY(d.lng, d.lat);
+          return (
+            <div key={d.id} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)', transition: 'left 1.2s linear, top 1.2s linear' }}>
+              <div style={{ width: 14, height: 14, borderRadius: 99, background: tierColor[d.tier] || 'var(--ink-500)', border: '2px solid #fff', boxShadow: 'var(--shadow)' }} />
+              {d.name && <div className="mono" style={{ fontSize: 10, marginTop: 2, color: 'var(--ink-700)', whiteSpace: 'nowrap', transform: 'translateX(-50%)', marginLeft: 7 }}>{d.name.split(' ')[0]}</div>}
+            </div>
+          );
+        })}
+        {!list.length && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--ink-500)' }}>{t('Sin conductores activos', 'No active drivers')}</div>}
       </div>
     </div>
   );

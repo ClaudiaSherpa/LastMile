@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, DocType, session, Zone } from './lib/api';
 import { I18nCtx, Lang, useI18n } from './lib/i18n';
+import { Tracking } from './Tracking';
 
 // ── static config (vehicle enum is fixed; capacity mirrors the backend) ──
 const VEHICLES = [
@@ -383,8 +384,12 @@ export function App() {
 
   const i18n = useMemo(() => ({ lang, setLang, t: (es: string, en: string) => (lang === 'es' ? es : en) }), [lang]);
 
+  // consignee tracking link: /?track=<token> — public, no onboarding session
+  const trackToken = useMemo(() => new URLSearchParams(window.location.search).get('track'), []);
+
   // resume an in-flight application on load
   useEffect(() => {
+    if (trackToken) return;
     const s = session.get();
     if (!s) { setView('welcome'); return; }
     api.get(s.id, s.token)
@@ -406,6 +411,14 @@ export function App() {
   };
 
   const reset = () => { session.clear(); setRef(null); setSubmitted(null); setView('welcome'); };
+
+  if (trackToken) {
+    return (
+      <I18nCtx.Provider value={i18n}>
+        <Tracking token={trackToken} />
+      </I18nCtx.Provider>
+    );
+  }
 
   return (
     <I18nCtx.Provider value={i18n}>

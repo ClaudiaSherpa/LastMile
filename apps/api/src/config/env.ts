@@ -52,6 +52,11 @@ export const env = {
     // exclusive window (ms) each priority wave gets before the offer widens
     waveMs: int(process.env.TENDER_WAVE_MS, 15000),
   },
+  tracking: {
+    // server-side GPS simulator so the live map moves without a real device
+    simulate: (process.env.TRACKING_SIMULATE ?? 'on') !== 'off',
+    simIntervalMs: int(process.env.TRACKING_SIM_MS, 2500),
+  },
   ocr: {
     // OpenRouter vision model used to auto-fill onboarding fields from uploaded
     // documents. Empty key => OCR is skipped gracefully (manual entry still works).
