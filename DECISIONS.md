@@ -71,3 +71,19 @@ Running log of notable choices made while building, per the brief's instruction 
 - Every decision writes an `AuditLog` (actor, stage, outcome, reason); approval/rejection notifies
   the driver through the templated NotificationsService. Seed demo applications have no DriverProfile
   (pure queue demos), so all driver mutations are null-guarded.
+
+## Phase 4
+- **BullMQ repeatable daily scan** (`0 8 * * *`) runs the compliance check; a `ComplianceScheduler`
+  owns the Queue + in-process Worker. If Redis is down it logs a warning and the API still boots —
+  scheduled scans just disabled. An admin trigger runs the scan **synchronously** (returns a summary)
+  for instant demo feedback; a separate endpoint exercises the queued path.
+- **Reminder cadence is config-driven** per `DocumentType.reminderOffsets` (default 30/15/3). The
+  decision of which offset fires is a pure, unit-tested `reminderDue()` — on a late first scan it
+  fires only the most urgent crossed threshold and marks earlier ones handled (no spam). Sent
+  reminders are recorded as `Reminder` rows to dedupe.
+- **Auto-suspend / restore reuses `computeEligibility`** (shared with the approval engine). When a
+  required doc expires the driver is set `eligible=false` (+audit `eligibility.suspended`, notify
+  driver + all dispatchers); renewing the doc re-approves it, clears sent reminders, and restores
+  eligibility if all required docs are valid (audit `eligibility.restored`). Verified end-to-end.
+- Seed adds tracked docs with near/past expiries (Marisol reminder, Camila lapse) so the compliance
+  dashboard and auto-suspend are demoable immediately. Ops gets a Compliance tab (scan + renew).

@@ -11,6 +11,7 @@ import {
   VEHICLE_CAPACITY_KG,
   VehicleType,
   ApplicationStatus,
+  DocumentStatus,
   FreightStatus,
 } from '@sherpa/shared';
 import { AppDataSource } from '../data-source';
@@ -19,6 +20,7 @@ import {
   ApprovalWorkflow,
   Application,
   AvailabilitySlot,
+  Document,
   DocumentType,
   DriverProfile,
   Freight,
@@ -134,6 +136,7 @@ async function run() {
   const driverRepo = ds.getRepository(DriverProfile);
   const vehicleRepo = ds.getRepository(Vehicle);
   const slotRepo = ds.getRepository(AvailabilitySlot);
+  const profilesByEmail: Record<string, DriverProfile> = {};
 
   const activeDrivers = [
     { name: 'Aurelio Quintero', email: 'aurelio@drv.co', vehicle: VehicleType.MOTO, plate: 'KXR-21F', score: 96, zone: 'chapinero', status: DriverStatus.ENROUTE, deliveries: 1284, accept: 98, onTime: 99, rating: 4.9 },
@@ -175,8 +178,27 @@ async function run() {
         ['manana', 'tarde'].map((block) => slotRepo.create({ driver: profile, weekday: wd, block })),
       ),
     );
+    profilesByEmail[d.email] = profile;
   }
   console.log(`  ✓ ${activeDrivers.length} active drivers + vehicles + availability`);
+
+  // ── Tracked documents w/ expiries (drive the compliance demo) ──
+  const docRepo = ds.getRepository(Document);
+  const dt = (key: string) => docTypes.find((x) => x.key === key)!;
+  const isoIn = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  await docRepo.save([
+    // Marisol: SOAT expiring soon (reminder demo) + license further out
+    docRepo.create({ driver: profilesByEmail['marisol@drv.co'], documentType: dt('soat'), status: DocumentStatus.APPROVED, expiryDate: isoIn(10) }),
+    docRepo.create({ driver: profilesByEmail['marisol@drv.co'], documentType: dt('license'), status: DocumentStatus.APPROVED, expiryDate: isoIn(40) }),
+    // Camila: already-lapsed required SOAT — a scan will expire it and auto-suspend her
+    docRepo.create({ driver: profilesByEmail['camila@drv.co'], documentType: dt('soat'), status: DocumentStatus.APPROVED, expiryDate: isoIn(-5) }),
+    docRepo.create({ driver: profilesByEmail['camila@drv.co'], documentType: dt('license'), status: DocumentStatus.APPROVED, expiryDate: isoIn(120) }),
+  ]);
+  console.log('  ✓ tracked documents with expiries (compliance demo)');
 
   // ── Pending applications (Ops security queue) ────────────────
   const appRepo = ds.getRepository(Application);

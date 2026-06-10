@@ -72,4 +72,9 @@ export const api = {
   securityCheck: (id: string, check: string, result: string) =>
     request<any>(`/approvals/${id}/security-check`, { method: 'POST', body: JSON.stringify({ check, result }) }),
   workflows: () => request<any[]>('/workflows'),
+  // compliance
+  compliance: (within = 60) => request<any[]>(`/compliance?within=${within}`),
+  runScan: () => request<any>('/compliance/scan', { method: 'POST' }),
+  renewDoc: (id: string, expiryDate: string) =>
+    request<any>(`/compliance/documents/${id}/renew`, { method: 'POST', body: JSON.stringify({ expiryDate }) }),
 };

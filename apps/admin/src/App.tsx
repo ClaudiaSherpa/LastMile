@@ -76,6 +76,7 @@ function Login({ onDone }: { onDone: () => void }) {
 const TABS = [
   ['dashboard', 'Panel', 'Dashboard'],
   ['approvals', 'Aprobaciones', 'Approvals'],
+  ['compliance', 'Cumplimiento', 'Compliance'],
   ['drivers', 'Conductores', 'Drivers'],
 ] as const;
 
@@ -121,6 +122,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
         <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           {tab === 'dashboard' && <Dashboard />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
+          {tab === 'compliance' && <Compliance />}
           {tab === 'drivers' && <Drivers />}
         </div>
       </div>
@@ -276,6 +278,74 @@ function Approvals({ role }: { role?: string }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function Compliance() {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<any[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
+
+  const load = () => api.compliance(90).then(setRows).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const scan = async () => {
+    setBusy(true);
+    try { setSummary(await api.runScan()); await load(); } finally { setBusy(false); }
+  };
+  const renew = async (id: string) => {
+    const d = new Date(); d.setFullYear(d.getFullYear() + 1);
+    await api.renewDoc(id, d.toISOString().slice(0, 10));
+    await load();
+  };
+
+  const tone = (days: number, status: string) =>
+    status === 'expired' || days < 0 ? 'badge-red' : days <= 15 ? 'badge-amber' : 'badge-gray';
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 13.5, color: 'var(--ink-500)' }}>
+          {t('Documentos rastreados que vencen pronto o ya vencidos. La suspensión de elegibilidad es automática.',
+             'Tracked documents expiring soon or already expired. Eligibility suspension is automatic.')}
+        </div>
+        <button className="btn btn-dark" disabled={busy} onClick={scan}>{busy ? '…' : t('Ejecutar escaneo', 'Run scan')}</button>
+      </div>
+      {summary && (
+        <div className="card" style={{ padding: 14, display: 'flex', gap: 14 }}>
+          <span className="badge badge-gray">{t('Escaneados', 'Scanned')}: {summary.scanned}</span>
+          <span className="badge badge-blue">{t('Recordatorios', 'Reminders')}: {summary.remindersSent}</span>
+          <span className="badge badge-red">{t('Vencidos', 'Expired')}: {summary.newlyExpired}</span>
+          <span className="badge badge-amber">{t('Suspendidos', 'Suspended')}: {summary.suspended}</span>
+        </div>
+      )}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
+              <th style={{ padding: '10px 16px' }}>{t('Conductor', 'Driver')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Documento', 'Document')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Vence', 'Expiry')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Días', 'Days')}</th>
+              <th style={{ padding: '10px 16px' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.id} style={{ borderTop: '1px solid var(--line)' }}>
+                <td style={{ padding: '12px 16px', fontWeight: 600 }}>{d.driver}</td>
+                <td style={{ padding: '12px 16px' }}>{d.document}{d.required && <span className="badge badge-gray" style={{ marginLeft: 6 }}>req</span>}</td>
+                <td style={{ padding: '12px 16px' }} className="mono">{d.expiryDate}</td>
+                <td style={{ padding: '12px 16px' }}><span className={`badge ${tone(d.daysLeft, d.status)}`}>{d.daysLeft}d</span></td>
+                <td style={{ padding: '12px 16px' }}><button className="btn btn-ghost" style={{ padding: '6px 12px' }} onClick={() => renew(d.id)}>{t('Renovar +1a', 'Renew +1y')}</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!rows.length && <div style={{ padding: 16, color: 'var(--ink-500)' }}>{t('Sin documentos próximos a vencer', 'No documents expiring soon')}</div>}
+      </div>
     </div>
   );
 }

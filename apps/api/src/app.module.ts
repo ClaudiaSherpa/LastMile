@@ -7,6 +7,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { OverviewModule } from './overview/overview.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { WorkflowModule } from './workflow/workflow.module';
+import { ComplianceModule } from './compliance/compliance.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
@@ -19,6 +20,7 @@ import { AppController } from './app.controller';
     OverviewModule,
     OnboardingModule,
     WorkflowModule,
+    ComplianceModule,
   ],
   controllers: [AppController],
   providers: [
