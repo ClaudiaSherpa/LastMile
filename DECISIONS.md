@@ -87,3 +87,27 @@ Running log of notable choices made while building, per the brief's instruction 
   eligibility if all required docs are valid (audit `eligibility.restored`). Verified end-to-end.
 - Seed adds tracked docs with near/past expiries (Marisol reminder, Camila lapse) so the compliance
   dashboard and auto-suspend are demoable immediately. Ops gets a Compliance tab (scan + renew).
+
+## Phase 5
+- **Eligible-pool computation is a pure, unit-tested module** (`tenders/pool.ts`): a driver qualifies
+  only if security-cleared, eligible (not suspended), available (on-duty, not delivering/off-duty),
+  vehicle type matches, capacity ≥ weight, and they cover the pickup **or** drop zone. Ranked by
+  DriverScore desc. 12 pool tests.
+- **Zone matching uses driver↔operating-area membership** rather than live `ST_Contains`. Freight
+  carries PostGIS points (from zone centroids) for the map, but eligibility keys off the seeded zone
+  coverage — simpler, deterministic, and equivalent for the demo. `ST_Contains` remains available for
+  point-based freight later.
+- **Priority waves by tier:** Elite/Preferred get wave 0, Standard wave 1, New wave 2; **priority
+  freight is Elite-exclusive** in wave 0. The offer widens one wave per `TENDER_WAVE_MS` (default 15s).
+- **Wave advancement uses in-process `setTimeout`**, not BullMQ — a single API instance, and a tender
+  surviving a restart simply stays at its current wave (acceptable for MVP). BullMQ stays reserved for
+  the durable daily compliance job.
+- **First-accept-wins is atomic:** `UPDATE tender SET open=false WHERE id=? AND open=true` — a second
+  accept gets 409. Verified end-to-end (Aurelio wins, second accept 409, freight assigned, delivery
+  opened with a tracking token).
+- **Tender accept/decline are `@Public` with driverId in the body** because the MVP driver PWA is
+  link/device-based (no JWT yet); the engine still validates pool membership + wave. Real driver auth
+  is a later hardening step.
+- Realtime is a Socket.IO hub (rooms `ops`, `driver:<id>`, `delivery:<id>`); REST stays the source of
+  truth + RBAC, the socket is a push channel. Ops Freight screen creates/broadcasts freight and shows
+  a live tender feed; Vite proxies `/socket.io` (ws) to the API.

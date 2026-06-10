@@ -139,11 +139,11 @@ async function run() {
   const profilesByEmail: Record<string, DriverProfile> = {};
 
   const activeDrivers = [
-    { name: 'Aurelio Quintero', email: 'aurelio@drv.co', vehicle: VehicleType.MOTO, plate: 'KXR-21F', score: 96, zone: 'chapinero', status: DriverStatus.ENROUTE, deliveries: 1284, accept: 98, onTime: 99, rating: 4.9 },
-    { name: 'Marisol Vega', email: 'marisol@drv.co', vehicle: VehicleType.CARRO, plate: 'GHT-845', score: 88, zone: 'teusaquillo', status: DriverStatus.DELIVERING, deliveries: 642, accept: 91, onTime: 94, rating: 4.6 },
-    { name: 'Bernardo Ruiz', email: 'bernardo@drv.co', vehicle: VehicleType.VAN, plate: 'WPL-302', score: 83, zone: 'kennedy', status: DriverStatus.ENROUTE, deliveries: 410, accept: 86, onTime: 89, rating: 4.4 },
-    { name: 'Camila Ardila', email: 'camila@drv.co', vehicle: VehicleType.MOTO, plate: 'JDR-77E', score: 74, zone: 'suba', status: DriverStatus.IDLE, deliveries: 188, accept: 79, onTime: 85, rating: 4.1 },
-    { name: 'Héctor Paz', email: 'hector@drv.co', vehicle: VehicleType.CAMIONETA, plate: 'TBN-019', score: 91, zone: 'usaquen', status: DriverStatus.IDLE, deliveries: 523, accept: 93, onTime: 96, rating: 4.7 },
+    { name: 'Aurelio Quintero', email: 'aurelio@drv.co', vehicle: VehicleType.MOTO, plate: 'KXR-21F', score: 96, zone: 'chapinero', zones: ['chapinero', 'chico', 'usaquen'], status: DriverStatus.IDLE, deliveries: 1284, accept: 98, onTime: 99, rating: 4.9 },
+    { name: 'Marisol Vega', email: 'marisol@drv.co', vehicle: VehicleType.CARRO, plate: 'GHT-845', score: 88, zone: 'teusaquillo', zones: ['teusaquillo', 'centro', 'kennedy'], status: DriverStatus.DELIVERING, deliveries: 642, accept: 91, onTime: 94, rating: 4.6 },
+    { name: 'Bernardo Ruiz', email: 'bernardo@drv.co', vehicle: VehicleType.VAN, plate: 'WPL-302', score: 83, zone: 'kennedy', zones: ['kennedy', 'fontibon', 'bosa'], status: DriverStatus.IDLE, deliveries: 410, accept: 86, onTime: 89, rating: 4.4 },
+    { name: 'Camila Ardila', email: 'camila@drv.co', vehicle: VehicleType.MOTO, plate: 'JDR-77E', score: 74, zone: 'suba', zones: ['suba', 'engativa'], status: DriverStatus.IDLE, deliveries: 188, accept: 79, onTime: 85, rating: 4.1 },
+    { name: 'Héctor Paz', email: 'hector@drv.co', vehicle: VehicleType.CAMIONETA, plate: 'TBN-019', score: 91, zone: 'usaquen', zones: ['usaquen', 'chico'], status: DriverStatus.IDLE, deliveries: 523, accept: 93, onTime: 96, rating: 4.7 },
   ];
 
   for (const d of activeDrivers) {
@@ -166,7 +166,7 @@ async function run() {
         avgRating: d.rating,
         lastLng: z.lng,
         lastLat: z.lat,
-        operatingAreas: [areaBySlug(d.zone)],
+        operatingAreas: d.zones.map((s) => areaBySlug(s)),
       }),
     );
     await vehicleRepo.save(

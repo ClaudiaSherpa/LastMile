@@ -48,6 +48,10 @@ export const env = {
     driver: process.env.STORAGE_DRIVER ?? 'local',
     localDir: process.env.STORAGE_LOCAL_DIR ?? './storage',
   },
+  tenders: {
+    // exclusive window (ms) each priority wave gets before the offer widens
+    waveMs: int(process.env.TENDER_WAVE_MS, 15000),
+  },
   ocr: {
     // OpenRouter vision model used to auto-fill onboarding fields from uploaded
     // documents. Empty key => OCR is skipped gracefully (manual entry still works).

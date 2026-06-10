@@ -94,9 +94,9 @@ export class Tender {
   @Column({ type: 'int', default: 0 })
   currentWave: number;
 
-  // ranked eligible driver ids computed at broadcast time
+  // ranked eligible drivers computed at broadcast time: {id,wave,score,tier}
   @Column({ type: 'jsonb', default: () => `'[]'` })
-  rankedDriverIds: string[];
+  rankedDriverIds: Array<{ id: string; wave: number; score: number; tier: string }>;
 
   @Column({ default: true })
   open: boolean;

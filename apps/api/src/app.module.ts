@@ -8,6 +8,8 @@ import { OverviewModule } from './overview/overview.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { WorkflowModule } from './workflow/workflow.module';
 import { ComplianceModule } from './compliance/compliance.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { TenderModule } from './tenders/tender.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
@@ -17,10 +19,12 @@ import { AppController } from './app.controller';
     AuthModule,
     AuditModule,
     NotificationsModule,
+    RealtimeModule,
     OverviewModule,
     OnboardingModule,
     WorkflowModule,
     ComplianceModule,
+    TenderModule,
   ],
   controllers: [AppController],
   providers: [
