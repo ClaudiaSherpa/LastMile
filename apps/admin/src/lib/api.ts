@@ -64,4 +64,12 @@ export const api = {
   overview: () => request<any>('/overview'),
   drivers: () => request<any[]>('/drivers'),
   applications: () => request<any[]>('/applications'),
+  // approvals
+  queue: () => request<any[]>('/approvals/queue'),
+  approval: (id: string) => request<any>(`/approvals/${id}`),
+  decide: (id: string, outcome: 'pass' | 'fail' | 'return', reason?: string) =>
+    request<any>(`/approvals/${id}/decision`, { method: 'POST', body: JSON.stringify({ outcome, reason }) }),
+  securityCheck: (id: string, check: string, result: string) =>
+    request<any>(`/approvals/${id}/security-check`, { method: 'POST', body: JSON.stringify({ check, result }) }),
+  workflows: () => request<any[]>('/workflows'),
 };

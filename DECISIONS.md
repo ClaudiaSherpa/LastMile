@@ -55,3 +55,19 @@ Running log of notable choices made while building, per the brief's instruction 
 - **OCR only fills empty fields** — it never clobbers a value the applicant already typed; expiry/
   issue dates are recorded per document.
 - Local-disk storage behind a `StorageService` interface (S3-swappable); files under `./storage`.
+
+## Phase 3
+- **Workflow engine reads config, never hardcodes the pipeline.** `WorkflowService` loads the
+  active `ApprovalWorkflow`'s ordered stages and walks them: **automatic** stages evaluate a JSON
+  `ruleset` against submitted data (e.g. `requireAllRequiredDocs` auto-approves uploaded docs),
+  **manual** stages park the application in the responsible role's queue. Reordering/adding stages
+  in config changes behavior with no code change.
+- **Security stage gates eligibility.** Passing the stage flagged `isSecurityClearance` sets
+  `driver.securityCleared=true`; only then can `computeEligibility` make the driver tender-eligible.
+- **Stage-role enforcement.** `decide()` rejects (403) anyone whose role ≠ the current stage's
+  `responsibleRole` (admin overrides). Verified: dispatcher gets 403 trying to clear a security stage.
+- **`computeEligibility` is a pure, unit-tested function** (security cleared + all required docs
+  approved & unexpired) — reused later by the compliance auto-suspend job (Phase 4).
+- Every decision writes an `AuditLog` (actor, stage, outcome, reason); approval/rejection notifies
+  the driver through the templated NotificationsService. Seed demo applications have no DriverProfile
+  (pure queue demos), so all driver mutations are null-guarded.

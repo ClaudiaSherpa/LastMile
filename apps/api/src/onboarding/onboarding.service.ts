@@ -31,6 +31,7 @@ import {
 import { StorageService } from '../storage/storage.service';
 import { OcrService } from '../ocr/ocr.service';
 import { AuditService } from '../audit/audit.service';
+import { WorkflowService } from '../workflow/workflow.service';
 
 // top-level draft keys OCR is allowed to auto-fill (only when empty)
 const AUTOFILL_KEYS = ['name', 'cedula', 'plate', 'brand', 'model', 'year', 'color'] as const;
@@ -52,6 +53,7 @@ export class OnboardingService {
     private storage: StorageService,
     private ocr: OcrService,
     private audit: AuditService,
+    private workflow: WorkflowService,
   ) {}
 
   /** Active document types — the onboarding form renders from these (config-driven). */
@@ -263,7 +265,21 @@ export class OnboardingService {
       reason: 'Applicant submitted onboarding',
     });
 
-    return { id: app.id, reference: app.reference, status: app.status };
+    // run the configured workflow (automatic stages run now; manual stages queue)
+    await this.workflow.start(app.id);
+    const fresh = await this.apps.findOne({
+      where: { id: app.id },
+      relations: { currentStage: true },
+    });
+
+    return {
+      id: app.id,
+      reference: app.reference,
+      status: fresh?.status ?? app.status,
+      currentStage: fresh?.currentStage
+        ? { nameEs: fresh.currentStage.nameEs, nameEn: fresh.currentStage.nameEn }
+        : null,
+    };
   }
 
   private publicView(app: Application) {

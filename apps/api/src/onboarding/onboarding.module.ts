@@ -15,6 +15,7 @@ import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 import { StorageService } from '../storage/storage.service';
 import { OcrService } from '../ocr/ocr.service';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { OcrService } from '../ocr/ocr.service';
       AvailabilitySlot,
       ApprovalWorkflow,
     ]),
+    WorkflowModule,
   ],
   controllers: [OnboardingController],
   providers: [OnboardingService, StorageService, OcrService],

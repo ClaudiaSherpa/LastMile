@@ -94,8 +94,8 @@ the admin console — never hardcoded. RBAC is enforced server-side on every end
 ## Build progress
 
 1. ✅ **Scaffold + DB schema/migrations + auth/RBAC + seed**
-2. ✅ **Onboarding wizard + configurable DocumentTypes + upload + OCR auto-fill** — *this phase*
-3. ⬜ Approval workflow engine + security stage + Ops queue
+2. ✅ **Onboarding wizard + configurable DocumentTypes + upload + OCR auto-fill**
+3. ✅ **Approval workflow engine + security stage + Ops queue** — *this phase*
 4. ⬜ Document expiry reminders + eligibility auto-suspend (BullMQ)
 5. ⬜ Shipment + tender engine + priority-wave broadcast (WS)
 6. ⬜ GPS streaming + live map + consignee tracking link

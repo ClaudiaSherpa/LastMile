@@ -6,11 +6,20 @@ import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OverviewModule } from './overview/overview.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { WorkflowModule } from './workflow/workflow.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, AuditModule, NotificationsModule, OverviewModule, OnboardingModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    AuditModule,
+    NotificationsModule,
+    OverviewModule,
+    OnboardingModule,
+    WorkflowModule,
+  ],
   controllers: [AppController],
   providers: [
     // RBAC enforced globally: every route is authenticated + role-checked unless @Public().

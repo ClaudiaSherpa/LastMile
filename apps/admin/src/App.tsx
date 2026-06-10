@@ -120,7 +120,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
         </div>
         <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           {tab === 'dashboard' && <Dashboard />}
-          {tab === 'approvals' && <Approvals />}
+          {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'drivers' && <Drivers />}
         </div>
       </div>
@@ -163,33 +163,119 @@ function Dashboard() {
   );
 }
 
-function Approvals() {
+const CHECK_RESULTS = ['pass', 'flag', 'pending', 'fail'] as const;
+const checkBadge: Record<string, string> = { pass: 'badge-brand', flag: 'badge-red', fail: 'badge-red', pending: 'badge-gray' };
+
+function Approvals({ role }: { role?: string }) {
   const { t, lang } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
-  useEffect(() => { api.applications().then(setRows).catch(() => {}); }, []);
+  const [sel, setSel] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState('');
+
+  const load = () => api.queue().then(setRows).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const open = (id: string) => api.approval(id).then((d) => { setSel(d); setReason(''); });
+
+  const canDecide = sel?.currentStage && (role === 'admin' || sel.currentStage.responsibleRole === role) && sel.currentStage.mode === 'manual';
+
+  const decide = async (outcome: 'pass' | 'fail' | 'return') => {
+    if (!sel) return;
+    setBusy(true);
+    try {
+      await api.decide(sel.id, outcome, reason || undefined);
+      await load();
+      // refresh or close
+      const next = await api.approval(sel.id).catch(() => null);
+      setSel(next && (next.status === 'in_review' || next.status === 'returned') ? next : null);
+    } finally { setBusy(false); }
+  };
+
+  const setCheck = async (check: string, result: string) => {
+    if (!sel) return;
+    await api.securityCheck(sel.id, check, result);
+    open(sel.id);
+  };
+
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      {rows.map((a) => (
-        <div key={a.id} className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="mono" style={{ fontSize: 12, color: 'var(--ink-500)' }}>{a.reference}</span>
-              <strong>{a.name}</strong>
-              {a.currentStage?.isSecurity && <span className="badge badge-amber">{t('Seguridad', 'Security')}</span>}
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+      {/* queue */}
+      <div style={{ flex: 1, display: 'grid', gap: 12, minWidth: 0 }}>
+        {rows.map((a) => (
+          <button key={a.id} onClick={() => open(a.id)} className="card"
+            style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left', cursor: 'pointer',
+              borderColor: sel?.id === a.id ? 'var(--brand)' : 'var(--line)' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--ink-500)' }}>{a.reference}</span>
+                <strong>{a.name}</strong>
+                {a.currentStage?.isSecurity && <span className="badge badge-amber">{t('Seguridad', 'Security')}</span>}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-500)', marginTop: 2 }}>{a.vehicle} · {a.plate} · {(a.zones || []).join(', ')}</div>
             </div>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-500)', marginTop: 2 }}>
-              {a.vehicle} · {a.plate} · {(a.zones || []).join(', ')}
-            </div>
+            <span className="badge badge-blue">{a.currentStage ? (lang === 'es' ? a.currentStage.nameEs : a.currentStage.nameEn) : a.status}</span>
+          </button>
+        ))}
+        {!rows.length && <div style={{ color: 'var(--ink-500)' }}>{t('Cola vacía', 'Queue empty')}</div>}
+      </div>
+
+      {/* review panel */}
+      {sel && (
+        <div className="card" style={{ width: 380, flexShrink: 0, padding: 20, position: 'sticky', top: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="eyebrow">{sel.reference}</span>
+            <button onClick={() => setSel(null)} className="btn btn-ghost" style={{ padding: '4px 10px' }}>✕</button>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {Object.entries(a.securityChecks || {}).map(([k, v]) => (
-              <span key={k} className={`badge ${v === 'pass' ? 'badge-brand' : v === 'flag' ? 'badge-red' : 'badge-gray'}`}>{k}</span>
+          <h2 className="display" style={{ fontSize: 22, margin: '6px 0 2px' }}>{sel.name}</h2>
+          <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>{sel.vehicle} · {sel.plate} · {(sel.zones || []).join(', ')}</div>
+
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Etapa actual', 'Current stage')}</div>
+          <div style={{ marginBottom: 16 }}>
+            <span className="badge badge-blue">{lang === 'es' ? sel.currentStage?.nameEs : sel.currentStage?.nameEn}</span>
+            <span className="badge badge-gray" style={{ marginLeft: 6 }}>{sel.currentStage?.responsibleRole}</span>
+          </div>
+
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Verificación de seguridad', 'Security checks')}</div>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+            {Object.entries(sel.securityChecks || {}).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13 }}>{k}</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {CHECK_RESULTS.map((r) => (
+                    <button key={r} onClick={() => setCheck(k, r)} disabled={role !== 'admin' && role !== 'security_officer'}
+                      className={`badge ${v === r ? checkBadge[r] : 'badge-gray'}`}
+                      style={{ cursor: 'pointer', opacity: v === r ? 1 : 0.5, border: 'none' }}>{r}</button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-          <span className="badge badge-blue">{a.currentStage ? (lang === 'es' ? a.currentStage.nameEs : a.currentStage.nameEn) : a.status}</span>
+
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Documentos', 'Documents')}</div>
+          <div style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
+            {(sel.documents || []).map((d: any) => (
+              <div key={d.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span>{d.name}</span>
+                <span className={`badge ${d.status === 'approved' ? 'badge-brand' : d.status === 'rejected' || d.status === 'expired' ? 'badge-red' : 'badge-gray'}`}>{d.status}</span>
+              </div>
+            ))}
+            {!sel.documents?.length && <span style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Solicitud de demostración (sin documentos)', 'Demo application (no documents)')}</span>}
+          </div>
+
+          {canDecide ? (<>
+            <textarea className="textarea" placeholder={t('Motivo (opcional)', 'Reason (optional)')} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} style={{ marginBottom: 10 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button className="btn btn-primary" disabled={busy} onClick={() => decide('pass')}>{t('Aprobar etapa', 'Pass stage')}</button>
+              <button className="btn btn-ghost" disabled={busy} onClick={() => decide('return')}>{t('Devolver', 'Return')}</button>
+              <button className="btn btn-danger" disabled={busy} onClick={() => decide('fail')} style={{ gridColumn: '1 / -1' }}>{t('Rechazar', 'Reject')}</button>
+            </div>
+          </>) : (
+            <div className="badge badge-gray" style={{ width: '100%', justifyContent: 'center', padding: 10 }}>
+              {t('Esta etapa la decide ', 'This stage is decided by ')}{sel.currentStage?.responsibleRole}
+            </div>
+          )}
         </div>
-      ))}
-      {!rows.length && <div style={{ color: 'var(--ink-500)' }}>{t('Sin solicitudes', 'No applications')}</div>}
+      )}
     </div>
   );
 }
