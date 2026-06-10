@@ -1,0 +1,29 @@
+{
+  "name": "sherpa-lm",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sherpa LM — on-demand last-mile delivery platform (Bogotá)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,admin,driver -c green,blue,magenta \"npm run dev -w @sherpa/api\" \"npm run dev -w @sherpa/admin\" \"npm run dev -w @sherpa/driver\"",
+    "build": "npm run build -w @sherpa/shared && npm run build -w @sherpa/api && npm run build -w @sherpa/admin && npm run build -w @sherpa/driver",
+    "dev:api": "npm run dev -w @sherpa/api",
+    "dev:admin": "npm run dev -w @sherpa/admin",
+    "dev:driver": "npm run dev -w @sherpa/driver",
+    "migration:run": "npm run migration:run -w @sherpa/api",
+    "migration:revert": "npm run migration:revert -w @sherpa/api",
+    "seed": "npm run seed -w @sherpa/api",
+    "test": "npm run test -w @sherpa/api",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

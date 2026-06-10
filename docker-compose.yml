@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: sherpa-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-sherpa}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sherpa}
+      POSTGRES_DB: ${DB_NAME:-sherpa_lm}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - sherpa_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sherpa} -d ${DB_NAME:-sherpa_lm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: sherpa-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - sherpa_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  sherpa_db:
+  sherpa_redis:

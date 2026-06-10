@@ -1,0 +1,161 @@
+/* ============================================================
+   Sherpa LM — design system
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --ink-900: oklch(0.17 0.018 250);
+  --ink-800: oklch(0.23 0.02 250);
+  --ink-700: oklch(0.32 0.02 250);
+  --ink-600: oklch(0.44 0.018 250);
+  --ink-500: oklch(0.56 0.015 250);
+  --ink-400: oklch(0.68 0.012 250);
+  --line: oklch(0.91 0.006 250);
+  --line-soft: oklch(0.95 0.005 250);
+  --paper: oklch(0.985 0.004 250);
+  --surface: #ffffff;
+  --surface-2: oklch(0.975 0.004 250);
+
+  --brand: oklch(0.70 0.128 168);
+  --brand-600: oklch(0.62 0.13 168);
+  --brand-700: oklch(0.50 0.105 168);
+  --brand-tint: oklch(0.95 0.032 168);
+  --brand-ink: oklch(0.40 0.08 168);
+
+  --amber: oklch(0.79 0.13 72);
+  --amber-tint: oklch(0.95 0.045 80);
+  --amber-ink: oklch(0.50 0.10 60);
+
+  --blue: oklch(0.62 0.12 248);
+  --blue-tint: oklch(0.95 0.032 248);
+  --blue-ink: oklch(0.45 0.10 250);
+
+  --red: oklch(0.58 0.18 25);
+  --red-tint: oklch(0.95 0.04 25);
+  --red-ink: oklch(0.48 0.16 25);
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 2px rgba(16,24,40,0.05);
+  --shadow: 0 4px 16px -4px rgba(16,24,40,0.12);
+  --shadow-lg: 0 18px 48px -12px rgba(16,24,40,0.22);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--ink-900);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+
+/* ---- type ---- */
+.display { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.02em; }
+.mono { font-family: var(--font-mono); }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-500);
+}
+
+/* ---- buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600; padding: 11px 18px;
+  transition: transform .12s ease, background .15s ease, box-shadow .15s ease, border-color .15s;
+  white-space: nowrap; line-height: 1;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--brand); color: oklch(0.22 0.03 168); box-shadow: var(--shadow-sm); }
+.btn-primary:hover { background: var(--brand-600); color: #fff; }
+.btn-dark { background: var(--ink-900); color: #fff; }
+.btn-dark:hover { background: var(--ink-800); }
+.btn-ghost { background: transparent; color: var(--ink-700); border-color: var(--line); }
+.btn-ghost:hover { background: var(--surface-2); border-color: var(--ink-400); }
+.btn-danger { background: var(--red-tint); color: var(--red-ink); }
+.btn-danger:hover { background: oklch(0.90 0.06 25); }
+.btn-lg { padding: 14px 22px; font-size: 16px; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: .45; pointer-events: none; }
+
+/* ---- badges / chips ---- */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.02em; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.badge-brand { background: var(--brand-tint); color: var(--brand-ink); }
+.badge-amber { background: var(--amber-tint); color: var(--amber-ink); }
+.badge-blue  { background: var(--blue-tint); color: var(--blue-ink); }
+.badge-red   { background: var(--red-tint); color: var(--red-ink); }
+.badge-gray  { background: var(--surface-2); color: var(--ink-600); border-color: var(--line); }
+.badge-ink   { background: var(--ink-900); color: #fff; }
+
+/* ---- cards ---- */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+}
+
+/* ---- inputs ---- */
+.field-label {
+  display: block; font-size: 13px; font-weight: 600; color: var(--ink-700);
+  margin-bottom: 7px;
+}
+.input, .select, .textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); padding: 12px 13px; font-size: 15px; color: var(--ink-900);
+  transition: border-color .15s, box-shadow .15s; outline: none;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--brand-600);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+.input::placeholder { color: var(--ink-400); }
+
+/* ---- progress ---- */
+.track { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.track > span { display: block; height: 100%; background: var(--brand); border-radius: 999px; transition: width .5s cubic-bezier(.2,.7,.2,1); }
+
+/* ---- scrollbars ---- */
+.scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 2px solid var(--surface); }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--ink-400); }
+
+/* ---- live pulse ---- */
+@keyframes pulse-ring {
+  0% { transform: scale(.6); opacity: .7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes blink { 50% { opacity: .35; } }
+.live-dot { animation: blink 1.6s ease-in-out infinite; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up .4s cubic-bezier(.2,.7,.2,1) both; }
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* ---- map placeholder grid ---- */
+.map-grid {
+  background-color: oklch(0.94 0.012 220);
+  background-image:
+    linear-gradient(oklch(0.90 0.014 220) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.90 0.014 220) 1px, transparent 1px);
+  background-size: 40px 40px;
+}

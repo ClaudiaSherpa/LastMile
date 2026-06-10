@@ -1,0 +1,249 @@
+import { useEffect, useMemo, useState } from 'react';
+import { api, auth } from './lib/api';
+import { I18nCtx, Lang, useI18n } from './lib/i18n';
+
+// ── shared bits ─────────────────────────────────────────────────
+function LangToggle() {
+  const { lang, setLang } = useI18n();
+  return (
+    <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+      {(['es', 'en'] as Lang[]).map((l) => (
+        <button key={l} onClick={() => setLang(l)} className="mono"
+          style={{ border: 'none', borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 600,
+            background: lang === l ? 'var(--ink-900)' : 'transparent', color: lang === l ? '#fff' : 'var(--ink-500)' }}>
+          {l.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const tierBadge: Record<string, string> = {
+  elite: 'badge-brand', preferente: 'badge-blue', estandar: 'badge-gray', nuevo: 'badge-amber',
+};
+const statusBadge: Record<string, string> = {
+  enroute: 'badge-blue', delivering: 'badge-brand', idle: 'badge-gray', offduty: 'badge-gray',
+};
+
+// ── login ───────────────────────────────────────────────────────
+function Login({ onDone }: { onDone: () => void }) {
+  const { t } = useI18n();
+  const [email, setEmail] = useState('dispatch@sherpa-c.com');
+  const [password, setPassword] = useState('sherpa123');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      const r = await api.login(email, password);
+      auth.set(r);
+      onDone();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--ink-900)' }}>
+      <div style={{ position: 'fixed', inset: 0, opacity: 0.5, pointerEvents: 'none',
+        background: 'radial-gradient(80% 60% at 70% -10%, oklch(0.45 0.11 168 / .55), transparent 60%)' }} />
+      <form onSubmit={submit} className="card" style={{ width: 380, padding: 28, position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--brand)' }} />
+          <span className="display" style={{ fontSize: 18, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand-600)' }}>LM</span> · Ops</span>
+        </div>
+        <label className="field-label">{t('Correo', 'Email')}</label>
+        <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} style={{ marginBottom: 12 }} />
+        <label className="field-label">{t('Contraseña', 'Password')}</label>
+        <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ marginBottom: 16 }} />
+        {err && <div className="badge badge-red" style={{ marginBottom: 12 }}>{err}</div>}
+        <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
+          {busy ? '…' : t('Ingresar', 'Sign in')}
+        </button>
+        <p style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 14, textAlign: 'center' }}>
+          admin · dispatch · security @sherpa-c.com / sherpa123
+        </p>
+      </form>
+    </div>
+  );
+}
+
+// ── ops shell ───────────────────────────────────────────────────
+const TABS = [
+  ['dashboard', 'Panel', 'Dashboard'],
+  ['approvals', 'Aprobaciones', 'Approvals'],
+  ['drivers', 'Conductores', 'Drivers'],
+] as const;
+
+function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
+  const { t } = useI18n();
+  const [tab, setTab] = useState<string>('dashboard');
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--paper)' }}>
+      {/* sidebar */}
+      <div style={{ width: 230, flexShrink: 0, background: 'var(--ink-900)', color: '#fff', display: 'flex', flexDirection: 'column', padding: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, padding: '4px 6px' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--brand)' }} />
+          <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand)' }}>LM</span></span>
+        </div>
+        {TABS.map(([id, es, en]) => (
+          <button key={id} onClick={() => setTab(id)}
+            style={{ textAlign: 'left', border: 'none', borderRadius: 9, padding: '10px 12px', marginBottom: 4,
+              fontSize: 14, fontWeight: 600, background: tab === id ? 'var(--brand)' : 'transparent',
+              color: tab === id ? '#063' : 'rgba(255,255,255,.65)' }}>
+            {t(es, en)}
+          </button>
+        ))}
+        <div style={{ marginTop: 'auto', fontSize: 12, color: 'rgba(255,255,255,.5)' }}>
+          <div style={{ marginBottom: 8 }}>{me?.email}<br /><span className="mono">{me?.role}</span></div>
+          <button onClick={onLogout} className="btn btn-ghost" style={{ color: '#fff', borderColor: 'rgba(255,255,255,.2)', width: '100%' }}>
+            {t('Salir', 'Sign out')}
+          </button>
+        </div>
+      </div>
+
+      {/* main */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <div>
+            <span className="eyebrow">{t('Operaciones · Bogotá', 'Operations · Bogotá')}</span>
+            <h1 className="display" style={{ fontSize: 22, margin: '2px 0 0' }}>
+              {t(TABS.find((x) => x[0] === tab)![1], TABS.find((x) => x[0] === tab)![2])}
+            </h1>
+          </div>
+          <LangToggle />
+        </div>
+        <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+          {tab === 'dashboard' && <Dashboard />}
+          {tab === 'approvals' && <Approvals />}
+          {tab === 'drivers' && <Drivers />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, sub }: { label: string; value: any; sub?: string }) {
+  return (
+    <div className="card" style={{ padding: 18 }}>
+      <div className="eyebrow">{label}</div>
+      <div className="display" style={{ fontSize: 32, margin: '6px 0 0' }}>{value}</div>
+      {sub && <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Dashboard() {
+  const { t } = useI18n();
+  const [o, setO] = useState<any>(null);
+  useEffect(() => { api.overview().then(setO).catch(() => {}); }, []);
+  if (!o) return <div style={{ color: 'var(--ink-500)' }}>…</div>;
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+        <Kpi label={t('Conductores', 'Drivers')} value={o.drivers} sub={`${o.driversMoving} ${t('en movimiento', 'moving')}`} />
+        <Kpi label={t('Solicitudes', 'Applications')} value={o.applications} sub={t('en cola', 'in queue')} />
+        <Kpi label={t('Fletes', 'Freight')} value={o.freights} sub={t('disponibles', 'available')} />
+        <Kpi label={t('Etapas de aprobación', 'Approval stages')} value={o.config.approvalStages} sub={t('configurables', 'configurable')} />
+      </div>
+      <div className="card" style={{ padding: 18 }}>
+        <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Configuración (editable, no hardcode)', 'Configuration (editable, not hardcoded)')}</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <span className="badge badge-gray">{o.config.documentTypes} {t('tipos de documento', 'document types')}</span>
+          <span className="badge badge-gray">{o.config.operatingAreas} {t('zonas operativas', 'operating areas')}</span>
+          <span className="badge badge-gray">{o.config.approvalStages} {t('etapas', 'stages')}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Approvals() {
+  const { t, lang } = useI18n();
+  const [rows, setRows] = useState<any[]>([]);
+  useEffect(() => { api.applications().then(setRows).catch(() => {}); }, []);
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {rows.map((a) => (
+        <div key={a.id} className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="mono" style={{ fontSize: 12, color: 'var(--ink-500)' }}>{a.reference}</span>
+              <strong>{a.name}</strong>
+              {a.currentStage?.isSecurity && <span className="badge badge-amber">{t('Seguridad', 'Security')}</span>}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-500)', marginTop: 2 }}>
+              {a.vehicle} · {a.plate} · {(a.zones || []).join(', ')}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {Object.entries(a.securityChecks || {}).map(([k, v]) => (
+              <span key={k} className={`badge ${v === 'pass' ? 'badge-brand' : v === 'flag' ? 'badge-red' : 'badge-gray'}`}>{k}</span>
+            ))}
+          </div>
+          <span className="badge badge-blue">{a.currentStage ? (lang === 'es' ? a.currentStage.nameEs : a.currentStage.nameEn) : a.status}</span>
+        </div>
+      ))}
+      {!rows.length && <div style={{ color: 'var(--ink-500)' }}>{t('Sin solicitudes', 'No applications')}</div>}
+    </div>
+  );
+}
+
+function Drivers() {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<any[]>([]);
+  useEffect(() => { api.drivers().then(setRows).catch(() => {}); }, []);
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
+            <th style={{ padding: '10px 16px' }}>{t('Conductor', 'Driver')}</th>
+            <th style={{ padding: '10px 16px' }}>{t('Vehículo', 'Vehicle')}</th>
+            <th style={{ padding: '10px 16px' }}>{t('Nivel', 'Tier')}</th>
+            <th style={{ padding: '10px 16px' }}>{t('Puntaje', 'Score')}</th>
+            <th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((d) => (
+            <tr key={d.id} style={{ borderTop: '1px solid var(--line)' }}>
+              <td style={{ padding: '12px 16px', fontWeight: 600 }}>{d.name}
+                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', fontWeight: 400 }}>{d.plate}</div>
+              </td>
+              <td style={{ padding: '12px 16px' }}>{d.vehicle}</td>
+              <td style={{ padding: '12px 16px' }}><span className={`badge ${tierBadge[d.tier] || 'badge-gray'}`}>{d.tier}</span></td>
+              <td style={{ padding: '12px 16px' }} className="mono">{d.score}</td>
+              <td style={{ padding: '12px 16px' }}><span className={`badge ${statusBadge[d.status] || 'badge-gray'}`}>{d.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── root ────────────────────────────────────────────────────────
+export function App() {
+  const [lang, setLang] = useState<Lang>('es');
+  const [me, setMe] = useState<any>(null);
+  const [ready, setReady] = useState(false);
+
+  const i18n = useMemo(() => ({ lang, setLang, t: (es: string, en: string) => (lang === 'es' ? es : en) }), [lang]);
+
+  const loadMe = () => api.me().then(setMe).catch(() => setMe(null)).finally(() => setReady(true));
+  useEffect(() => { if (auth.access) loadMe(); else setReady(true); }, []);
+
+  const logout = () => { auth.clear(); setMe(null); };
+
+  return (
+    <I18nCtx.Provider value={i18n}>
+      {!ready ? null : me ? <Shell me={me} onLogout={logout} /> : <Login onDone={loadMe} />}
+    </I18nCtx.Provider>
+  );
+}
