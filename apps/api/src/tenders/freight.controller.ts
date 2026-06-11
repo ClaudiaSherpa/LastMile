@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { Role } from '@sherpa/shared';
 import { CurrentUser, Public, Roles } from '../auth/decorators';
 import { JwtPayload } from '@sherpa/shared';
@@ -17,6 +17,13 @@ export class FreightController {
   @Roles(Role.ADMIN, Role.DISPATCHER)
   list() {
     return this.freight.list();
+  }
+
+  /** Premium freight Elite drivers get first access to. */
+  @Public()
+  @Get('freight/priority-batch')
+  priorityBatch(@Query('tier') tier?: string) {
+    return this.freight.priorityBatch(tier);
   }
 
   @Post('freight')

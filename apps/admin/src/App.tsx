@@ -541,6 +541,8 @@ function Drivers() {
             <th style={{ padding: '10px 16px' }}>{t('Vehículo', 'Vehicle')}</th>
             <th style={{ padding: '10px 16px' }}>{t('Nivel', 'Tier')}</th>
             <th style={{ padding: '10px 16px' }}>{t('Puntaje', 'Score')}</th>
+            <th style={{ padding: '10px 16px' }}>{t('Rating', 'Rating')}</th>
+            <th style={{ padding: '10px 16px' }}>{t('Elegible', 'Eligible')}</th>
             <th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th>
           </tr>
         </thead>
@@ -552,7 +554,9 @@ function Drivers() {
               </td>
               <td style={{ padding: '12px 16px' }}>{d.vehicle}</td>
               <td style={{ padding: '12px 16px' }}><span className={`badge ${tierBadge[d.tier] || 'badge-gray'}`}>{d.tier}</span></td>
-              <td style={{ padding: '12px 16px' }} className="mono">{d.score}</td>
+              <td style={{ padding: '12px 16px' }} className="mono">{Math.round(d.score)}</td>
+              <td style={{ padding: '12px 16px' }} className="mono">{d.avgRating ? `★ ${Number(d.avgRating).toFixed(1)}` : '—'}</td>
+              <td style={{ padding: '12px 16px' }}><span className={`badge ${d.eligible ? 'badge-brand' : 'badge-red'}`}>{d.eligible ? t('Sí', 'Yes') : 'No'}</span></td>
               <td style={{ padding: '12px 16px' }}><span className={`badge ${statusBadge[d.status] || 'badge-gray'}`}>{d.status}</span></td>
             </tr>
           ))}

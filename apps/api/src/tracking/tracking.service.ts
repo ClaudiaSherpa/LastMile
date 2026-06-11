@@ -10,6 +10,8 @@ import {
 import { Delivery, DriverProfile, Freight, LocationPing } from '../database/entities';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AuditService } from '../audit/audit.service';
+import { RatingsService } from '../ratings/ratings.service';
+import { ScoringService } from '../scoring/scoring.service';
 
 export interface PingInput {
   driverId: string;
@@ -38,6 +40,8 @@ export class TrackingService {
     @InjectRepository(Freight) private freights: Repository<Freight>,
     private realtime: RealtimeGateway,
     private audit: AuditService,
+    private ratings: RatingsService,
+    private scoring: ScoringService,
   ) {}
 
   /** Ingest a GPS ping: persist, update denormalized position, fan out over WS. */
@@ -114,6 +118,14 @@ export class TrackingService {
     const payload = { deliveryId: delivery.id, status, timeline: delivery.timeline };
     this.realtime.emitOps(WS_EVENTS.DELIVERY_UPDATED, payload);
     this.realtime.emitDelivery(delivery.id, WS_EVENTS.DELIVERY_UPDATED, payload);
+
+    // on completion: message the consignee for a rating + recompute the driver score
+    if (status === DeliveryStatus.DELIVERED) {
+      await this.ratings.requestRating(delivery.id).catch(() => {});
+      if (delivery.driver) await this.scoring.recomputeDriver(delivery.driver.id).catch(() => {});
+    } else if (status === DeliveryStatus.FAILED && delivery.driver) {
+      await this.scoring.recomputeDriver(delivery.driver.id).catch(() => {});
+    }
     return payload;
   }
 

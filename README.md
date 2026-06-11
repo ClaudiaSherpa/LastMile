@@ -98,6 +98,6 @@ the admin console — never hardcoded. RBAC is enforced server-side on every end
 3. ✅ **Approval workflow engine + security stage + Ops queue**
 4. ✅ **Document expiry reminders + eligibility auto-suspend (BullMQ)**
 5. ✅ **Shipment + tender engine + priority-wave broadcast (WS)**
-6. ✅ **GPS streaming + live map + consignee tracking link** — *this phase*
-7. ⬜ Ratings + DriverScore + tiering + priority batch
+6. ✅ **GPS streaming + live map + consignee tracking link**
+7. ✅ **Ratings + DriverScore + tiering + priority batch** — *this phase*
 8. ⬜ Admin console for all config + polish/docs/tests

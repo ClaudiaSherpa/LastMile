@@ -39,6 +39,8 @@ export interface Zone { slug: string; nameEs: string; nameEn: string; lng: numbe
 export const api = {
   health: () => fetch(`${BASE}/health`).then((r) => r.ok),
   track: (token: string) => j<any>(`/track/${token}`),
+  submitRating: (token: string, stars: number, feedback?: string) =>
+    j<any>('/ratings', { method: 'POST', body: JSON.stringify({ token, stars, feedback }) }),
   documentTypes: () => j<DocType[]>('/document-types'),
   operatingAreas: () => j<Zone[]>('/operating-areas'),
   create: () => j<{ id: string; reference: string; resumeToken: string }>('/applications', { method: 'POST' }),

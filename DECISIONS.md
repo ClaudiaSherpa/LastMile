@@ -129,3 +129,21 @@ Running log of notable choices made while building, per the brief's instruction 
   transition between WS updates so motion looks smooth despite a 2.5s tick.
 - Consignee tracking is served by the driver PWA at `/?track=<token>` (the link target), so one app
   covers both onboarding and tracking; it joins the `delivery:<id>` room for live updates.
+
+## Phase 7
+- **DriverScore is a pure, unit-tested weighted blend** (`scoring/score.ts`): normalized rating (0–5→
+  0–100), completion, acceptance, on-time, and a recency decay (~2 pts/day since last delivery). Weights
+  **and** tier thresholds come from the active `ScoringConfig` row (config, not code) and map score→tier
+  (Élite 92 / Preferido 80 / Estándar 60 / Nuevo). Editing weights recomputes everyone.
+- **Score drives tier drives wave order:** the same `tier` set by scoring feeds the Phase-5 wave engine,
+  so better drivers get earlier tender access — the loop the brief asks for. Recompute runs on each
+  completed/failed delivery and nightly (BullMQ `0 3 * * *`, Redis-optional).
+- **Ratings reuse the delivery's tracking token** as the rating link (`/?rate=<token>`) — no second
+  secret. Submission is public + idempotent (one rating per delivery, 400 on duplicate; must be
+  delivered). On completion the consignee is auto-messaged the link via the templated WhatsApp adapter.
+- **Completion hook wiring:** `TrackingService` (Phase 6) calls `RatingsService.requestRating` +
+  `ScoringService.recomputeDriver` on `delivered`. To avoid a cycle, Tracking imports Ratings+Scoring
+  (one direction). Verified: deliver → rating request logged → 5★ submit → score 96→99.5.
+- **Priority batch** = premium (`priority`) freight surfaced to Outstanding (Elite) drivers first
+  (`GET /freight/priority-batch?tier=`), with `accessibleNow` true only for Elite — the access gate is
+  otherwise realized by the Elite-exclusive wave 0 already in the tender engine.

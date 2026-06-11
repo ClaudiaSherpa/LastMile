@@ -11,6 +11,8 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { TenderModule } from './tenders/tender.module';
 import { TrackingModule } from './tracking/tracking.module';
+import { ScoringModule } from './scoring/scoring.module';
+import { RatingsModule } from './ratings/ratings.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
@@ -27,6 +29,8 @@ import { AppController } from './app.controller';
     ComplianceModule,
     TenderModule,
     TrackingModule,
+    ScoringModule,
+    RatingsModule,
   ],
   controllers: [AppController],
   providers: [

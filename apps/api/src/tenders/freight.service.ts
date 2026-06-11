@@ -67,6 +67,28 @@ export class FreightService {
     }));
   }
 
+  /**
+   * Priority batch — premium (priority) freight that Outstanding (Elite) drivers
+   * get first access to. Elite see it as open; lower tiers see it as locked until
+   * the wave engine widens.
+   */
+  async priorityBatch(tier?: string) {
+    const list = await this.freights.find({ where: { priority: true }, order: { createdAt: 'DESC' } });
+    const open = list.filter((f) => f.status === FreightStatus.AVAILABLE || f.status === FreightStatus.BROADCASTING);
+    return open.map((f) => ({
+      id: f.id,
+      reference: f.reference,
+      client: f.client,
+      pickupZone: f.pickupZone,
+      dropZone: f.dropZone,
+      requiredVehicle: f.requiredVehicle,
+      payout: f.payout,
+      status: f.status,
+      eliteExclusive: true,
+      accessibleNow: tier === 'elite',
+    }));
+  }
+
   private async nextReference(): Promise<string> {
     const count = await this.freights.count();
     let n = 4820 + count;
