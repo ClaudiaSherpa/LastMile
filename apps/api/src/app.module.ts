@@ -13,6 +13,7 @@ import { TenderModule } from './tenders/tender.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { RatingsModule } from './ratings/ratings.module';
+import { ConfigAdminModule } from './config-admin/config.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
@@ -31,6 +32,7 @@ import { AppController } from './app.controller';
     TrackingModule,
     ScoringModule,
     RatingsModule,
+    ConfigAdminModule,
   ],
   controllers: [AppController],
   providers: [

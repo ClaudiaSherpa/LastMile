@@ -83,4 +83,18 @@ export const api = {
   createFreight: (body: any) => request<any>('/freight', { method: 'POST', body: JSON.stringify(body) }),
   broadcast: (id: string) => request<any>(`/freight/${id}/broadcast`, { method: 'POST' }),
   live: () => request<any[]>('/tracking/live'),
+  // ── admin config console ──
+  cfgDocTypes: () => request<any[]>('/config/document-types'),
+  cfgCreateDocType: (b: any) => request<any>('/config/document-types', { method: 'POST', body: JSON.stringify(b) }),
+  cfgUpdateDocType: (id: string, b: any) => request<any>(`/config/document-types/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  cfgDeleteDocType: (id: string) => request<any>(`/config/document-types/${id}`, { method: 'DELETE' }),
+  cfgTemplates: () => request<any[]>('/config/templates'),
+  cfgUpdateTemplate: (id: string, b: any) => request<any>(`/config/templates/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  cfgAreas: () => request<any[]>('/config/operating-areas'),
+  cfgUpdateArea: (id: string, b: any) => request<any>(`/config/operating-areas/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  cfgWorkflow: () => request<any>('/config/workflow'),
+  cfgUpdateStage: (id: string, b: any) => request<any>(`/config/workflow/stages/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  cfgReorder: (order: string[]) => request<any>('/config/workflow/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+  scoringConfig: () => request<any>('/scoring/config'),
+  scoringUpdate: (b: any) => request<any>('/scoring/config', { method: 'POST', body: JSON.stringify(b) }),
 };

@@ -147,3 +147,28 @@ Running log of notable choices made while building, per the brief's instruction 
 - **Priority batch** = premium (`priority`) freight surfaced to Outstanding (Elite) drivers first
   (`GET /freight/priority-batch?tier=`), with `accessibleNow` true only for Elite — the access gate is
   otherwise realized by the Elite-exclusive wave 0 already in the tender engine.
+
+## Phase 8
+- **One admin-only `ConfigController` (`/config/*`)** exposes CRUD for every config surface
+  (document types, notification templates, operating areas, approval workflow/stages incl.
+  reorder); scoring weights/tiers stay at `/scoring/config`. Each write is audited. Verified the
+  loop the brief calls out: adding a `DocumentType` via admin immediately changes the public
+  `/document-types` the onboarding form renders from — **no code change** — and a dispatcher gets 403.
+- **Thin controllers inject repositories directly** for the config CRUD (no service layer) — these are
+  straight persistence operations and a service would add indirection without value.
+- Admin *Configuración* console has sub-sections for doc types, workflow (reorder + role/mode/security
+  toggles), scoring (weights with a sum check + tier thresholds), templates (editable `{{var}}` body),
+  and zones (activate/deactivate). The tab is hidden for non-admin roles client-side and enforced
+  server-side.
+- **Test coverage** concentrates on the pure engine logic the brief names (eligibility, scoring,
+  reminders) plus pool/waves, OCR normalization and template interpolation — 37 unit tests, no DB or
+  network needed, fast and deterministic.
+
+## Known shortcuts (honest scope notes)
+- Driver tender-accept and GPS ping are `@Public` with `driverId` in the body — the MVP driver PWA is
+  link/device-based, so real driver JWT auth is a follow-up hardening step.
+- Tender wave advancement and the GPS feed are in-process (`setTimeout` / interval) — correct for a
+  single API instance; a multi-instance deploy would move these to BullMQ/durable timers.
+- Bogotá operating-area polygons are approximate boxes and eligibility uses zone membership rather
+  than live `ST_Contains` (points are stored, so it can be switched on).
+- OCR/WhatsApp/FCM are stubbed unless keyed; nothing external is required to run the whole platform.

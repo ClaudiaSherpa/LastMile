@@ -99,5 +99,44 @@ the admin console — never hardcoded. RBAC is enforced server-side on every end
 4. ✅ **Document expiry reminders + eligibility auto-suspend (BullMQ)**
 5. ✅ **Shipment + tender engine + priority-wave broadcast (WS)**
 6. ✅ **GPS streaming + live map + consignee tracking link**
-7. ✅ **Ratings + DriverScore + tiering + priority batch** — *this phase*
-8. ⬜ Admin console for all config + polish/docs/tests
+7. ✅ **Ratings + DriverScore + tiering + priority batch**
+8. ✅ **Admin console for all config + polish/docs/tests** — *this phase*
+
+All 8 phases complete.
+
+## End-to-end demo flow
+
+1. **Driver PWA** (`:5274`) → complete the 7-step application. Upload docs — with an
+   `OPENROUTER_API_KEY` set, OCR pre-fills name/cédula/plate/expiry; without it you type them.
+   Submit → pending-review screen.
+2. **Ops** (`:5273`, `security@…`) → *Aprobaciones*: the applicant sits at the **Security
+   clearance** stage. Set checks, **Pass stage** (a dispatcher gets 403 here — wrong role).
+3. **Ops** (`dispatch@…`) → finalize approval → the driver is `securityCleared` + `eligible`.
+4. *Fletes* → create + **Broadcast** a freight → eligible pool ranked by score, offered in
+   priority waves over WebSockets; watch the **live feed**. First valid accept wins.
+5. *Mapa en vivo* → the assigned driver moves toward dropoff (GPS sim). Advance the delivery to
+   **delivered**.
+6. Consignee opens the **tracking link** (`/?track=<token>`) live, then the **rating link**
+   (`/?rate=<token>`) → the driver's **DriverScore/tier recompute** instantly.
+7. *Cumplimiento* → **Run scan**: a driver with a lapsed required doc is **auto-suspended**;
+   **Renew** restores eligibility.
+8. *Configuración* (`admin@…`) → add a document type, reorder approval stages, or change scoring
+   weights — **all reflected with no code change**.
+
+## Admin config console (configuration over hardcoding)
+
+Everything below is editable at runtime from *Configuración* (admin) — never hardcoded:
+document types (+ reminder offsets), the approval workflow & stages (mode/role/order/security
+gate), scoring weights & tier thresholds, notification templates (ES/EN, `{{vars}}`), and
+operating areas.
+
+## Tests
+
+```bash
+npm test   # 37 unit tests
+```
+
+Core-engine logic is unit-tested: tender **eligibility** + priority **waves** (`tenders/pool`),
+eligibility gate (`workflow/eligibility`), **DriverScore**/tiering/recency (`scoring/score`),
+expiry **reminder** cadence (`compliance/reminders`), OCR field normalization (`ocr/normalize`),
+and template interpolation (`common/template`).

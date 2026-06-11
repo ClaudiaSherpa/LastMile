@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, auth } from './lib/api';
 import { I18nCtx, Lang, useI18n } from './lib/i18n';
 import { useEvent, useRoom } from './lib/socket';
+import { Config } from './Config';
 
 const VEHICLE_TYPES = ['moto', 'carro', 'van', 'camioneta', 'bici'];
 
@@ -83,6 +84,7 @@ const TABS = [
   ['compliance', 'Cumplimiento', 'Compliance'],
   ['freight', 'Fletes', 'Freight'],
   ['drivers', 'Conductores', 'Drivers'],
+  ['config', 'Configuración', 'Config'],
 ] as const;
 
 // Bogotá bounding box -> 0..100% map space
@@ -105,7 +107,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--brand)' }} />
           <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand)' }}>LM</span></span>
         </div>
-        {TABS.map(([id, es, en]) => (
+        {TABS.filter(([id]) => id !== 'config' || me?.role === 'admin').map(([id, es, en]) => (
           <button key={id} onClick={() => setTab(id)}
             style={{ textAlign: 'left', border: 'none', borderRadius: 9, padding: '10px 12px', marginBottom: 4,
               fontSize: 14, fontWeight: 600, background: tab === id ? 'var(--brand)' : 'transparent',
@@ -139,6 +141,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'compliance' && <Compliance />}
           {tab === 'freight' && <FreightScreen />}
           {tab === 'drivers' && <Drivers />}
+          {tab === 'config' && <Config />}
         </div>
       </div>
     </div>
