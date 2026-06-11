@@ -62,6 +62,6 @@ export const env = {
     // documents. Empty key => OCR is skipped gracefully (manual entry still works).
     apiKey: process.env.OPENROUTER_API_KEY ?? '',
     baseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
-    model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.0-flash-001',
+    model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash-lite',
   },
 };

@@ -18,15 +18,21 @@ export function normalizeOcrFields(obj: Record<string, any>): Record<string, str
   return out;
 }
 
-/** Tolerant JSON extraction from a model response that may wrap JSON in prose. */
+/** Coerce a parsed value into a single flat field object (unwrap [ {...} ]). */
+function asObject(v: any): Record<string, any> {
+  if (Array.isArray(v)) return asObject(v[0] ?? {});
+  return v && typeof v === 'object' ? v : {};
+}
+
+/** Tolerant JSON extraction from a model response that may wrap JSON in prose/arrays. */
 export function parseOcrJson(text: string): Record<string, any> {
   try {
-    return JSON.parse(text);
+    return asObject(JSON.parse(text));
   } catch {
-    const m = text.match(/\{[\s\S]*\}/);
+    const m = text.match(/[\[{][\s\S]*[\]}]/);
     if (m) {
       try {
-        return JSON.parse(m[0]);
+        return asObject(JSON.parse(m[0]));
       } catch {
         /* ignore */
       }

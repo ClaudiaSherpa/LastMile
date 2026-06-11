@@ -4,6 +4,18 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { env } from './config/env';
 
+// Raise outbound fetch timeouts (OCR/FCM/WhatsApp). Node's undici defaults to a
+// 10s connect timeout, which a slow VPN/proxy can exceed -> "fetch failed".
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { setGlobalDispatcher, Agent } = require('undici');
+  setGlobalDispatcher(
+    new Agent({ connect: { timeout: 60_000 }, headersTimeout: 120_000, bodyTimeout: 120_000 }),
+  );
+} catch {
+  /* undici unavailable — default fetch timeouts apply */
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix(env.api.prefix);
