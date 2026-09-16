@@ -1,0 +1,133 @@
+# DigitalOcean App Platform spec for PasarEx LM.
+# One app, one domain:
+#   /            -> driver PWA (static)
+#   /ops         -> Ops console (static, built with base=/ops/)
+#   /api,/socket.io -> NestJS API (Docker service)
+# plus a managed PostgreSQL (enable the PostGIS extension — see DEPLOY.md) and a
+# PRE_DEPLOY job that runs TypeORM migrations before each release.
+#
+# Replace REPLACE_WITH_GH_OWNER/pasarex-lm with your GitHub repo, then:
+#   doctl apps create --spec .do/app.yaml
+# (or App Platform console -> Create App -> import this spec). Set SECRET values
+# (JWT secrets, webhook token, optional API keys) in the DO dashboard afterwards.
+
+name: pasarex-lm
+region: nyc
+
+databases:
+  - name: pasarex-db
+    engine: PG
+    version: "16"
+    production: false # dev database; switch to a managed cluster for production
+
+services:
+  - name: api
+    dockerfile_path: apps/api/Dockerfile
+    source_dir: /
+    github:
+      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      branch: master
+      deploy_on_push: true
+    http_port: 3100
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    routes:
+      - path: /api
+      - path: /socket.io
+    health_check:
+      http_path: /api/health
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: "3100"
+      - key: API_PREFIX
+        value: api
+      - key: DB_HOST
+        value: ${pasarex-db.HOSTNAME}
+      - key: DB_PORT
+        value: ${pasarex-db.PORT}
+      - key: DB_USER
+        value: ${pasarex-db.USERNAME}
+      - key: DB_PASSWORD
+        value: ${pasarex-db.PASSWORD}
+      - key: DB_NAME
+        value: ${pasarex-db.DATABASE}
+      - key: DB_SSL
+        value: "true"
+      - key: CORS_ORIGINS
+        value: ${APP_URL}
+      - key: PUBLIC_BASE_URL
+        value: ${APP_URL}
+      - key: TRACKING_SIMULATE
+        value: "on"
+      - key: JWT_ACCESS_SECRET
+        type: SECRET
+        value: CHANGE_ME_ACCESS
+      - key: JWT_REFRESH_SECRET
+        type: SECRET
+        value: CHANGE_ME_REFRESH
+      # ---- optional integrations (leave blank to keep them stubbed) ----
+      - key: OPENROUTER_API_KEY
+        type: SECRET
+        value: ""
+      - key: EVOLUTION_API_URL
+        value: http://159.65.224.135:8080
+      - key: EVOLUTION_API_KEY
+        type: SECRET
+        value: ""
+      - key: EVOLUTION_INSTANCE
+        value: pasarex
+      - key: EVOLUTION_WEBHOOK_TOKEN
+        type: SECRET
+        value: CHANGE_ME_HOOK
+
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    dockerfile_path: apps/api/Dockerfile
+    source_dir: /
+    github:
+      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      branch: master
+    run_command: cd /repo && npm run migration:run:prod -w @sherpa/api
+    instance_size_slug: basic-xxs
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        value: ${pasarex-db.HOSTNAME}
+      - key: DB_PORT
+        value: ${pasarex-db.PORT}
+      - key: DB_USER
+        value: ${pasarex-db.USERNAME}
+      - key: DB_PASSWORD
+        value: ${pasarex-db.PASSWORD}
+      - key: DB_NAME
+        value: ${pasarex-db.DATABASE}
+      - key: DB_SSL
+        value: "true"
+
+static_sites:
+  - name: driver
+    source_dir: /
+    github:
+      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      branch: master
+    build_command: npm ci && npm run build -w @sherpa/shared && npm run build -w @sherpa/driver
+    output_dir: apps/driver/dist
+    catchall_document: index.html
+    routes:
+      - path: /
+
+  - name: ops
+    source_dir: /
+    github:
+      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      branch: master
+    # base must match the route so the SPA's asset URLs resolve under /ops/
+    build_command: npm ci && npm run build -w @sherpa/shared && npm run build -w @sherpa/admin -- --base=/ops/
+    output_dir: apps/admin/dist
+    catchall_document: index.html
+    routes:
+      - path: /ops

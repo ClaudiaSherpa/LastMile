@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+coverage
+.git
+.env
+.env.local
+*.log
+storage
+apps/api/storage
+.vite
+.cache
+*.tsbuildinfo
+.DS_Store

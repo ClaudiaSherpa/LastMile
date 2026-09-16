@@ -23,6 +23,8 @@ export const env = {
     user: process.env.DB_USER ?? 'sherpa',
     password: process.env.DB_PASSWORD ?? 'sherpa',
     name: process.env.DB_NAME ?? 'sherpa_lm',
+    // managed providers (e.g. DigitalOcean) require TLS — enable with DB_SSL=true
+    ssl: (process.env.DB_SSL ?? 'false') === 'true',
   },
   redis: {
     host: process.env.REDIS_HOST ?? 'localhost',
