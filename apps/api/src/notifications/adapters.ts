@@ -37,7 +37,7 @@ export class FcmProvider implements NotificationProvider {
       },
       body: JSON.stringify({
         to: message.to,
-        notification: { title: message.subject ?? 'Sherpa LM', body: message.body },
+        notification: { title: message.subject ?? 'PasarEx LM', body: message.body },
       }),
     }).catch((e) => this.logger.error(`FCM send failed: ${e.message}`));
   }

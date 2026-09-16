@@ -3,10 +3,10 @@ import { io, Socket } from 'socket.io-client';
 import { api } from './lib/api';
 import { useI18n } from './lib/i18n';
 
-const BOGOTA = { minLng: -74.2, maxLng: -74.0, minLat: 4.55, maxLat: 4.78 };
+const BARBADOS = { minLng: -59.66, maxLng: -59.42, minLat: 13.04, maxLat: 13.34 };
 const toXY = (lng: number, lat: number) => ({
-  x: Math.max(4, Math.min(96, ((lng - BOGOTA.minLng) / (BOGOTA.maxLng - BOGOTA.minLng)) * 100)),
-  y: Math.max(4, Math.min(96, (1 - (lat - BOGOTA.minLat) / (BOGOTA.maxLat - BOGOTA.minLat)) * 100)),
+  x: Math.max(4, Math.min(96, ((lng - BARBADOS.minLng) / (BARBADOS.maxLng - BARBADOS.minLng)) * 100)),
+  y: Math.max(4, Math.min(96, (1 - (lat - BARBADOS.minLat) / (BARBADOS.maxLat - BARBADOS.minLat)) * 100)),
 });
 
 const STEPS = ['assigned', 'en_route_pickup', 'picked_up', 'en_route', 'delivered'];
@@ -55,7 +55,7 @@ export function Tracking({ token }: { token: string }) {
         <div style={{ padding: '20px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand)' }} />
-            <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
+            <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
           </div>
           <button onClick={() => setLang(lang === 'es' ? 'en' : 'es')} className="mono" style={{ border: '1px solid var(--line)', background: 'var(--surface)', borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 600 }}>{lang.toUpperCase()}</button>
         </div>

@@ -20,6 +20,7 @@ export class AuthService {
   async validateUser(emailOrPhone: string, password: string): Promise<User> {
     const user = await this.users.findOne({
       where: [{ email: emailOrPhone }, { phone: emailOrPhone }],
+      relations: { driverProfile: true },
     });
     if (!user || !user.passwordHash || !user.active) {
       throw new UnauthorizedException('Invalid credentials');
@@ -56,7 +57,10 @@ export class AuthService {
   }
 
   async refresh(userId: string, refreshToken: string): Promise<AuthTokens> {
-    const user = await this.users.findOne({ where: { id: userId } });
+    const user = await this.users.findOne({
+      where: { id: userId },
+      relations: { driverProfile: true },
+    });
     if (!user || !user.refreshTokenHash) throw new UnauthorizedException();
     const ok = await argon2.verify(user.refreshTokenHash, refreshToken);
     if (!ok) throw new UnauthorizedException();
@@ -68,7 +72,12 @@ export class AuthService {
   }
 
   private async issueTokens(user: User): Promise<AuthTokens> {
-    const payload: JwtPayload = { sub: user.id, role: user.role, email: user.email };
+    const payload: JwtPayload = {
+      sub: user.id,
+      role: user.role,
+      email: user.email,
+      driverId: user.driverProfile?.id,
+    };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: env.jwt.accessSecret,
       expiresIn: env.jwt.accessTtl,

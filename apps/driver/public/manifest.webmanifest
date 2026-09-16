@@ -1,7 +1,7 @@
 {
-  "name": "Sherpa LM — Conductor",
-  "short_name": "Sherpa LM",
-  "description": "App del conductor de Sherpa LM",
+  "name": "PasarEx LM — Driver",
+  "short_name": "PasarEx LM",
+  "description": "PasarEx LM driver app for Barbados",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d1117",

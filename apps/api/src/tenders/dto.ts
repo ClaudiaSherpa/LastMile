@@ -22,7 +22,3 @@ export class CreateFreightDto {
   @IsInt() @Min(0) payout: number;
   @IsOptional() @IsBoolean() priority?: boolean;
 }
-
-export class RespondDto {
-  @IsString() driverId: string;
-}

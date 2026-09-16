@@ -47,8 +47,8 @@ export const api = {
   get: (id: string, token: string) => j<any>(`/applications/${id}?token=${encodeURIComponent(token)}`),
   patch: (id: string, token: string, patch: Record<string, any>) =>
     j<any>(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ token, patch }) }),
-  submit: (id: string, token: string) =>
-    j<any>(`/applications/${id}/submit`, { method: 'POST', body: JSON.stringify({ token }) }),
+  submit: (id: string, token: string, password?: string) =>
+    j<any>(`/applications/${id}/submit`, { method: 'POST', body: JSON.stringify({ token, password }) }),
   uploadDocument: async (id: string, token: string, docKey: string, file: File) => {
     const fd = new FormData();
     fd.append('token', token);

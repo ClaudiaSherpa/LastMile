@@ -1,5 +1,5 @@
 /* ============================================================
-   Sherpa LM — design system
+   PasarEx LM — design system
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
@@ -158,4 +158,14 @@ input, select, textarea { font-family: inherit; }
     linear-gradient(oklch(0.90 0.014 220) 1px, transparent 1px),
     linear-gradient(90deg, oklch(0.90 0.014 220) 1px, transparent 1px);
   background-size: 40px 40px;
+}
+
+/* ---- mobile: let wide tables scroll horizontally instead of overflowing ---- */
+@media (max-width: 820px) {
+  .card > table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
 }

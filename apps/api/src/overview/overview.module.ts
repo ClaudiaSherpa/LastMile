@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   Application,
   ApprovalStage,
+  Delivery,
+  Document,
   DocumentType,
   DriverProfile,
   Freight,
@@ -19,6 +21,8 @@ import { OverviewController } from './overview.controller';
       DocumentType,
       OperatingArea,
       ApprovalStage,
+      Delivery,
+      Document,
     ]),
   ],
   controllers: [OverviewController],

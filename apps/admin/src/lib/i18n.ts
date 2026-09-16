@@ -9,9 +9,9 @@ export interface I18n {
 }
 
 export const I18nCtx = createContext<I18n>({
-  lang: 'es',
+  lang: 'en',
   setLang: () => {},
-  t: (es) => es,
+  t: (_es, en) => en,
 });
 
 export const useI18n = () => useContext(I18nCtx);

@@ -1,6 +1,6 @@
-# Sherpa LM — On-Demand Last-Mile Delivery Platform
+# PasarEx LM — On-Demand Last-Mile Delivery Platform
 
-An Uber-style last-mile delivery platform for **Bogotá, Colombia** (bilingual ES/EN). It
+An Uber-style last-mile delivery platform for **Barbados** (English UI, Spanish optional). It
 onboards and vets drivers & vehicles, runs a **configurable** approval + security-clearance
 workflow, tracks document compliance with expiry reminders, broadcasts freight as priority-wave
 tenders to an eligibility-ranked driver pool, tracks deliveries live by GPS, and feeds consignee
@@ -18,7 +18,7 @@ ratings back into a DriverScore that drives tender priority.
 | Cache / queues | Redis + BullMQ |
 | Realtime | Socket.IO (live GPS + tender push) |
 | Notifications | Pluggable provider interface — console stub (default), FCM, WhatsApp (Evolution API) |
-| Admin web (Ops) | React + Vite (reuses the Sherpa design system CSS) |
+| Admin web (Ops) | React + Vite (reuses the PasarEx design system CSS) |
 | Driver app | React PWA |
 | Shared | `@sherpa/shared` — types/enums/contracts |
 
@@ -65,15 +65,15 @@ npm run dev
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@sherpa-c.com` | `sherpa123` |
-| Dispatcher | `dispatch@sherpa-c.com` | `sherpa123` |
-| Security officer | `security@sherpa-c.com` | `sherpa123` |
+| Admin | `admin@pasarex.com` | `pasarex123` |
+| Dispatcher | `dispatch@pasarex.com` | `pasarex123` |
+| Security officer | `security@pasarex.com` | `pasarex123` |
 
-Seed drivers (`aurelio@drv.co` … `hector@drv.co`) share the same password.
+Seed drivers (`andre@drv.co`, `shanice@drv.co`, `rohan@drv.co`, `kimberly@drv.co`, `marcus@drv.co`) share the same password.
 
 ## Ports (configurable via `.env`)
 
-This dev machine already runs services on 3000 / 5432–5435 / 5173, so Sherpa LM defaults to
+This dev machine already runs services on 3000 / 5432–5435 / 5173, so PasarEx LM defaults to
 **API 3100, Postgres 5436, admin 5273, driver 5274** (Redis 6379). Change them in `.env`.
 
 ## Tests

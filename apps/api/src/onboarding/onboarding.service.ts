@@ -180,7 +180,7 @@ export class OnboardingService {
     const firstStage = workflow?.stages?.sort((a, b) => a.sortOrder - b.sortOrder)[0];
 
     // create the driver user + profile
-    const email = draft.email || `${(draft.cedula || crypto.randomBytes(4).toString('hex'))}@driver.sherpa`;
+    const email = draft.email || `${(draft.cedula || crypto.randomBytes(4).toString('hex'))}@driver.pasarex`;
     const passwordHash = await argon2.hash(password || crypto.randomBytes(12).toString('hex'));
     const user = await this.users.save(
       this.users.create({ email, phone: draft.phone, fullName: draft.name || 'Conductor', role: Role.DRIVER, passwordHash }),

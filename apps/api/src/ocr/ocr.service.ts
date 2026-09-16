@@ -63,8 +63,8 @@ export class OcrService {
         headers: {
           Authorization: `Bearer ${env.ocr.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://sherpa-c.com',
-          'X-Title': 'Sherpa LM Onboarding OCR',
+          'HTTP-Referer': 'https://pasarex.com',
+          'X-Title': 'PasarEx LM Onboarding OCR',
         },
         body: JSON.stringify({
           model: env.ocr.model,

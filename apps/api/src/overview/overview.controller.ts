@@ -1,11 +1,13 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Role } from '@sherpa/shared';
+import { DeliveryStatus, Role } from '@sherpa/shared';
 import { Roles } from '../auth/decorators';
 import {
   Application,
   ApprovalStage,
+  Delivery,
+  Document,
   DocumentType,
   DriverProfile,
   Freight,
@@ -25,6 +27,8 @@ export class OverviewController {
     @InjectRepository(DocumentType) private docTypes: Repository<DocumentType>,
     @InjectRepository(OperatingArea) private areas: Repository<OperatingArea>,
     @InjectRepository(ApprovalStage) private stages: Repository<ApprovalStage>,
+    @InjectRepository(Delivery) private deliveries: Repository<Delivery>,
+    @InjectRepository(Document) private documents: Repository<Document>,
   ) {}
 
   @Get('overview')
@@ -52,7 +56,7 @@ export class OverviewController {
   }
 
   @Get('drivers')
-  @Roles(Role.ADMIN, Role.DISPATCHER)
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
   async listDrivers() {
     const list = await this.drivers.find({
       relations: { user: true, vehicles: true, operatingAreas: true },
@@ -61,6 +65,8 @@ export class OverviewController {
     return list.map((d) => ({
       id: d.id,
       name: d.user?.fullName,
+      phone: d.user?.phone,
+      email: d.user?.email,
       status: d.status,
       tier: d.tier,
       score: d.score,
@@ -76,6 +82,73 @@ export class OverviewController {
       lastLng: d.lastLng,
       lastLat: d.lastLat,
     }));
+  }
+
+  /**
+   * Per-driver delivery breakdown for the map/driver-list detail panel:
+   * total ever assigned, delivered, still pending (in-flight), and failed.
+   */
+  @Get('drivers/:id/delivery-stats')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  async driverDeliveryStats(@Param('id') id: string) {
+    const driver = await this.drivers.findOne({ where: { id } });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    const rows = await this.deliveries
+      .createQueryBuilder('d')
+      .leftJoin('d.driver', 'dr')
+      .select('d.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('dr.id = :id', { id })
+      .groupBy('d.status')
+      .getRawMany<{ status: DeliveryStatus; count: string }>();
+
+    const byStatus = rows.reduce<Record<string, number>>((acc, r) => {
+      acc[r.status] = Number(r.count);
+      return acc;
+    }, {});
+    const assigned = Object.values(byStatus).reduce((s, n) => s + n, 0);
+    const delivered = byStatus[DeliveryStatus.DELIVERED] ?? 0;
+    const failed = byStatus[DeliveryStatus.FAILED] ?? 0;
+    // pending = in-flight = everything not yet in a terminal state
+    const pending = assigned - delivered - failed;
+
+    return { driverId: id, assigned, delivered, pending, failed, byStatus };
+  }
+
+  /**
+   * A driver's submitted documents + Terms-of-Service acceptance, for post-approval
+   * review by Ops. Read-only; the file bytes are served by GET /documents/:id/file.
+   */
+  @Get('drivers/:id/documents')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  async driverDocuments(@Param('id') id: string) {
+    const driver = await this.drivers.findOne({ where: { id }, relations: { user: true } });
+    if (!driver) throw new NotFoundException('Driver not found');
+    const docs = await this.documents.find({
+      where: { driver: { id } },
+      relations: { documentType: true },
+      order: { createdAt: 'ASC' },
+    });
+    const app = await this.applications.findOne({
+      where: { driver: { id } },
+      order: { submittedAt: 'DESC' },
+    });
+    const draft = (app?.draft as Record<string, any>) ?? {};
+    return {
+      driverId: id,
+      driver: { name: driver.user?.fullName, phone: driver.user?.phone, email: driver.user?.email },
+      terms: { acceptedAt: draft.termsAcceptedAt ?? null, version: draft.termsVersion ?? null },
+      documents: docs.map((d) => ({
+        id: d.id,
+        key: d.documentType.key,
+        name: d.documentType.nameEn,
+        status: d.status,
+        expiryDate: d.expiryDate,
+        issueDate: d.issueDate,
+        hasFile: !!d.fileRef,
+      })),
+    };
   }
 
   @Get('applications')

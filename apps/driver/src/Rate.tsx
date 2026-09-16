@@ -26,7 +26,7 @@ export function Rate({ token }: { token: string }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand)' }} />
-            <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
+            <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
           </div>
           <button onClick={() => setLang(lang === 'es' ? 'en' : 'es')} className="mono" style={{ border: '1px solid var(--line)', background: 'var(--surface)', borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 600 }}>{lang.toUpperCase()}</button>
         </div>

@@ -63,10 +63,32 @@ export const api = {
   me: () => request<{ sub: string; role: string; email?: string }>('/auth/me'),
   overview: () => request<any>('/overview'),
   drivers: () => request<any[]>('/drivers'),
+  driverStats: (id: string) =>
+    request<{ driverId: string; assigned: number; delivered: number; pending: number; failed: number }>(
+      `/drivers/${id}/delivery-stats`,
+    ),
+  driverDocuments: (id: string) =>
+    request<{
+      driverId: string;
+      driver: { name?: string; phone?: string; email?: string };
+      terms: { acceptedAt: string | null; version: string | null };
+      documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
+    }>(`/drivers/${id}/documents`),
   applications: () => request<any[]>('/applications'),
   // approvals
   queue: () => request<any[]>('/approvals/queue'),
   approval: (id: string) => request<any>(`/approvals/${id}`),
+  // fetch a submitted document's raw file (auth header can't ride an <img src>, so we blob it)
+  documentFileBlob: async (id: string, retry = true): Promise<Blob> => {
+    const res = await fetch(`${BASE}/documents/${id}/file`, {
+      headers: auth.access ? { Authorization: `Bearer ${auth.access}` } : {},
+    });
+    if (res.status === 401 && retry && auth.refresh && (await tryRefresh())) {
+      return api.documentFileBlob(id, false);
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
   decide: (id: string, outcome: 'pass' | 'fail' | 'return', reason?: string) =>
     request<any>(`/approvals/${id}/decision`, { method: 'POST', body: JSON.stringify({ outcome, reason }) }),
   securityCheck: (id: string, check: string, result: string) =>
@@ -97,4 +119,8 @@ export const api = {
   cfgReorder: (order: string[]) => request<any>('/config/workflow/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
   scoringConfig: () => request<any>('/scoring/config'),
   scoringUpdate: (b: any) => request<any>('/scoring/config', { method: 'POST', body: JSON.stringify(b) }),
+  // ── WhatsApp (Evolution) ──
+  whatsappMessages: () => request<any[]>('/whatsapp/messages'),
+  whatsappSend: (to: string, text: string, driverId?: string) =>
+    request<any>('/whatsapp/send', { method: 'POST', body: JSON.stringify({ to, text, driverId }) }),
 };

@@ -16,13 +16,13 @@ const DAYS = [['lun', 'Lun', 'Mon'], ['mar', 'Mar', 'Tue'], ['mie', 'Mié', 'Wed
 const BLOCKS = [['madrugada', 'Madrugada', 'Early', '00–06'], ['manana', 'Mañana', 'Morning', '06–12'], ['tarde', 'Tarde', 'Afternoon', '12–18'], ['noche', 'Noche', 'Night', '18–24']];
 
 // ── frame + primitives ──────────────────────────────────────────
+// On a desktop browser this renders a centered phone mock; on a real phone
+// (or narrow browser) the frame fills the viewport — see .device-* in styles.css.
 function Phone({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--ink-900)' }}>
-      <div style={{ position: 'fixed', inset: 0, opacity: 0.5, pointerEvents: 'none',
-        background: 'radial-gradient(90% 60% at 70% -10%, oklch(0.45 0.11 168 / .55), transparent 60%)' }} />
-      <div style={{ width: 390, maxWidth: '94vw', height: 'min(844px, 96vh)', borderRadius: 36, background: 'var(--paper)',
-        color: 'var(--ink-900)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+    <div className="device-shell">
+      <div className="device-glow" />
+      <div className="device-frame">
         {children}
       </div>
     </div>
@@ -71,22 +71,149 @@ function Welcome({ onStart }: { onStart: () => void }) {
       <div style={{ padding: '54px 26px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--brand)' }} />
-          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
+          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
         </div>
         <LangToggle />
       </div>
       <div style={{ padding: '40px 26px', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <span className="eyebrow" style={{ color: 'var(--brand-ink)' }}>{t('Conductor', 'Driver')}</span>
         <h1 className="display" style={{ fontSize: 34, lineHeight: 1.08, margin: '12px 0 14px' }}>
-          {t('Conduce con Sherpa en Bogotá.', 'Drive with Sherpa in Bogotá.')}
+          {t('Conduce con PasarEx en Barbados.', 'Drive with PasarEx in Barbados.')}
         </h1>
         <p style={{ fontSize: 15.5, lineHeight: 1.5, color: 'var(--ink-600)', margin: 0 }}>
-          {t('Sube licencia, SOAT y tarjeta de propiedad — las leemos por ti con OCR y autocompletamos el formulario. Tras la revisión de seguridad empiezas a recibir fletes.',
-             'Upload license, SOAT and registration — we read them with OCR and auto-fill the form. After security review you start receiving freight.')}
+          {t('Sube tu licencia, seguro y registro del vehículo — los leemos con OCR y autocompletamos el formulario. Tras la verificación de seguridad empiezas a recibir entregas.',
+             "Upload your driver's licence, insurance and vehicle registration — we read them with OCR and auto-fill the form. After the security check you start receiving deliveries.")}
         </p>
         <div style={{ marginTop: 'auto' }}>
           <button className="btn btn-primary btn-lg btn-block" onClick={onStart}>{t('Comenzar solicitud', 'Start application')}</button>
         </div>
+      </div>
+    </Phone>
+  );
+}
+
+// ── requirements + terms of service (must accept to apply) ──────
+export const TERMS_VERSION = '2026-08-01';
+
+const REQUIREMENTS = [
+  { es: 'Ser mayor de 18 años', en: 'Be 18 or older',
+    dEs: 'Debes tener al menos 18 años cumplidos para conducir con PasarEx.', dEn: 'You must be at least 18 years old to drive with PasarEx.' },
+  { es: 'Licencia de conducción vigente', en: 'Valid driver’s licence',
+    dEs: 'Licencia de conducción de Barbados vigente para la categoría de tu vehículo.', dEn: 'A current Barbados driver’s licence for your vehicle category.' },
+  { es: 'Vehículo elegible con documentos al día', en: 'Eligible vehicle with current documents',
+    dEs: 'Moto, carro, van o camioneta propios, con seguro obligatorio y registro vigentes.', dEn: 'Your own motorcycle, car, van or pickup, with valid compulsory insurance and registration.' },
+  { es: 'Smartphone compatible', en: 'Compatible smartphone',
+    dEs: 'iPhone o Android con plan de datos y GPS para recibir y rastrear entregas.', dEn: 'iPhone or Android with a data plan and GPS to receive and track deliveries.' },
+  { es: 'Documento de identidad', en: 'Government-issued ID',
+    dEs: 'Documento nacional de identidad de Barbados vigente para verificar tu identidad.', dEn: 'A valid Barbados national ID to verify your identity.' },
+  { es: 'Verificación de antecedentes', en: 'Background check',
+    dEs: 'Autorizas y debes aprobar la revisión de seguridad y antecedentes.', dEn: 'You authorize and must pass a security & background check.' },
+  { es: 'Cuenta bancaria a tu nombre', en: 'Bank account in your name',
+    dEs: 'Para recibir tus pagos por depósito directo.', dEn: 'To receive your earnings via direct deposit.' },
+];
+
+const TERMS = [
+  { es: '1. Aceptación y elegibilidad', en: '1. Acceptance & eligibility',
+    bEs: 'Al marcar la casilla de aceptación declaras que cumples todos los requisitos indicados y aceptas estos Términos de Servicio como condición para postularte y operar en la plataforma PasarEx LM.',
+    bEn: 'By checking the acceptance box you represent that you meet all the requirements listed above and agree to these Terms of Service as a condition to apply for and operate on the PasarEx LM platform.' },
+  { es: '2. Contratista independiente', en: '2. Independent contractor',
+    bEs: 'Operas como contratista independiente. Estos Términos no crean una relación laboral, de agencia ni de sociedad. Eres responsable de tus impuestos y obligaciones de seguridad social.',
+    bEn: 'You operate as an independent contractor. These Terms create no employment, agency or partnership relationship. You are responsible for your own taxes and social-security obligations.' },
+  { es: '3. Verificación de antecedentes y seguridad', en: '3. Background & security verification',
+    bEs: 'Autorizas a PasarEx LM y a sus aliados a verificar tu identidad, antecedentes y documentos. Aprobar la etapa de seguridad es obligatorio antes de recibir entregas.',
+    bEn: 'You authorize PasarEx LM and its partners to verify your identity, background and documents. Passing the security stage is mandatory before you can receive deliveries.' },
+  { es: '4. Veracidad de la información', en: '4. Accuracy of information',
+    bEs: 'Garantizas que toda la información y los documentos que cargas son verídicos, propios y están vigentes. La información falsa o los documentos vencidos pueden suspender tu elegibilidad.',
+    bEn: 'You warrant that all information and documents you upload are true, your own and current. False information or expired documents may suspend your eligibility.' },
+  { es: '5. Vehículo, licencia y seguros', en: '5. Vehicle, license & insurance',
+    bEs: 'Debes mantener tu licencia, seguro obligatorio y registro del vehículo vigentes, y conducir un vehículo en buen estado y debidamente asegurado conforme a la ley de Barbados.',
+    bEn: "You must keep your driver's licence, compulsory insurance and vehicle registration current, and operate a roadworthy vehicle properly insured under the laws of Barbados." },
+  { es: '6. Normas de conducta y servicio', en: '6. Conduct & service standards',
+    bEs: 'Te comprometes a prestar un servicio seguro, puntual y respetuoso, a cumplir las normas de tránsito y a proteger la mercancía y los datos del destinatario.',
+    bEn: 'You agree to provide safe, punctual and respectful service, to obey traffic laws, and to protect each shipment and the consignee’s data.' },
+  { es: '7. Pagos', en: '7. Payments',
+    bEs: 'Los pagos se liquidan por los fletes completados y se depositan en la cuenta bancaria a tu nombre. Las tarifas y condiciones pueden actualizarse y se notificarán en la app.',
+    bEn: 'Payments are settled for completed freight and deposited to the bank account in your name. Rates and conditions may be updated and will be notified in the app.' },
+  { es: '8. Calificaciones y desactivación', en: '8. Ratings & deactivation',
+    bEs: 'Tu DriverScore se calcula con calificaciones y desempeño y afecta tu prioridad de asignación. PasarEx LM puede suspender o desactivar tu cuenta por incumplimiento de estos Términos.',
+    bEn: 'Your DriverScore is computed from ratings and performance and affects your assignment priority. PasarEx LM may suspend or deactivate your account for breach of these Terms.' },
+  { es: '9. Protección de datos', en: '9. Data protection',
+    bEs: 'Autorizas el tratamiento de tus datos personales conforme a la Data Protection Act, 2019 de Barbados para operar el servicio, verificar tu elegibilidad y procesar pagos. Puedes acceder, actualizar y suprimir tus datos.',
+    bEn: 'You authorize the processing of your personal data under the Barbados Data Protection Act, 2019 to operate the service, verify your eligibility and process payments. You may access, update and delete your data.' },
+  { es: '10. Modificaciones y ley aplicable', en: '10. Modifications & governing law',
+    bEs: 'PasarEx LM puede modificar estos Términos; el uso continuo implica aceptación. Estos Términos se rigen por las leyes de Barbados.',
+    bEn: 'PasarEx LM may modify these Terms; continued use constitutes acceptance. These Terms are governed by the laws of Barbados.' },
+];
+
+function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | void; onBack: () => void }) {
+  const { t, lang } = useI18n();
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const apply = async () => {
+    if (!accepted || busy) return;
+    setBusy(true);
+    try { await onAccept(); } finally { setBusy(false); }
+  };
+
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 12px' }}>
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-700)' }}>‹</button>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', letterSpacing: '.08em' }}>PASAREX LM</span>
+          <LangToggle />
+        </div>
+        <div style={{ padding: '0 22px 12px' }}>
+          <span className="eyebrow" style={{ color: 'var(--brand-ink)' }}>{t('Antes de empezar', 'Before you start')}</span>
+          <h1 className="display" style={{ fontSize: 26, margin: '8px 0 5px' }}>{t('Requisitos y términos', 'Requirements & terms')}</h1>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--ink-500)', lineHeight: 1.5 }}>
+            {t('Para postularte como conductor debes cumplir con lo siguiente y aceptar los términos de servicio.',
+               'To apply as a driver you must meet the following and accept the terms of service.')}
+          </p>
+        </div>
+      </div>
+
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 18px' }}>
+        {/* requirements checklist */}
+        <div style={{ display: 'grid', gap: 13, marginBottom: 22 }}>
+          {REQUIREMENTS.map((r, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: 'var(--brand-tint)', color: 'var(--brand-ink)', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 14 }}>✓</div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14.5 }}>{lang === 'es' ? r.es : r.en}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-500)', lineHeight: 1.45, marginTop: 1 }}>{lang === 'es' ? r.dEs : r.dEn}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* terms of service */}
+        <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Términos de servicio', 'Terms of service')}</div>
+        <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 14, background: 'var(--surface-2)', maxHeight: 240, overflowY: 'auto' }}>
+          {TERMS.map((s, i) => (
+            <div key={i} style={{ marginBottom: i === TERMS.length - 1 ? 0 : 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{lang === 'es' ? s.es : s.en}</div>
+              <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-600)', lineHeight: 1.5 }}>{lang === 'es' ? s.bEs : s.bEn}</p>
+            </div>
+          ))}
+          <p className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 12, marginBottom: 0 }}>{t('Versión', 'Version')} {TERMS_VERSION}</p>
+        </div>
+      </div>
+
+      {/* footer: accept + apply */}
+      <div style={{ padding: '12px 20px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', marginBottom: 12 }}>
+          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: 'var(--brand)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, color: 'var(--ink-700)', lineHeight: 1.45 }}>
+            {t('He leído y acepto los Términos de Servicio y confirmo que cumplo con todos los requisitos.',
+               'I have read and accept the Terms of Service and confirm I meet all the requirements.')}
+          </span>
+        </label>
+        <button className="btn btn-primary btn-lg btn-block" disabled={!accepted || busy} onClick={apply}>
+          {busy ? '…' : t('Aceptar y postularme', 'Accept & apply')}
+        </button>
       </div>
     </Phone>
   );
@@ -134,6 +261,8 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
   const [toast, setToast] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // password lives only in local state — never persisted to the (plaintext) draft
+  const [password, setPassword] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const pendingDocKey = useRef<string>('');
 
@@ -153,7 +282,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
     if (step === 0) return draft.name && draft.phone && draft.cedula;
     if (step === 1) return !!draft.vehicle;
     if (step === 2) return draft.plate && draft.brand && draft.year;
-    if (step === 3) return allRequiredUploaded;
+    if (step === 3) return allRequiredUploaded && password.trim().length >= 6;
     if (step === 4) return (draft.zones || []).length > 0;
     if (step === 5) return (draft.days || []).length > 0 && (draft.blocks || []).length > 0;
     return true;
@@ -172,7 +301,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
       setBusy(true);
       try {
         await persist();
-        const res = await api.submit(appId, token);
+        const res = await api.submit(appId, token, password.trim());
         onSubmitted(res);
       } catch (e: any) {
         flash(e.message);
@@ -228,7 +357,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
       <div style={{ paddingTop: 54 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 12px' }}>
           <button onClick={back} style={{ width: 38, height: 38, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-700)' }}>‹</button>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', letterSpacing: '.08em' }}>SHERPA LM</span>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', letterSpacing: '.08em' }}>PASAREX LM</span>
           <LangToggle />
         </div>
         <div style={{ padding: '0 20px 14px' }}>
@@ -249,8 +378,8 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
         <div className="fade-up">
           {step === 0 && (<>
             <Field label={t('Nombre completo', 'Full name')}><input className="input" value={draft.name || ''} onChange={(e) => set({ name: e.target.value })} placeholder="Juan Pérez" /></Field>
-            <Field label={t('Cédula', 'National ID')}><input className="input mono" value={draft.cedula || ''} onChange={(e) => set({ cedula: e.target.value })} placeholder="1.0XX.XXX.XXX" /></Field>
-            <Field label={t('Celular', 'Mobile')}><input className="input mono" value={draft.phone || ''} onChange={(e) => set({ phone: e.target.value })} placeholder="+57 3XX XXX XXXX" /></Field>
+            <Field label={t('Documento nacional', 'National ID')}><input className="input mono" value={draft.cedula || ''} onChange={(e) => set({ cedula: e.target.value })} placeholder="850101-1234" /></Field>
+            <Field label={t('Celular', 'Mobile')}><input className="input mono" value={draft.phone || ''} onChange={(e) => set({ phone: e.target.value })} placeholder="+1 246 XXX XXXX" /></Field>
             <Field label={t('Correo (opcional)', 'Email (optional)')}><input className="input" value={draft.email || ''} onChange={(e) => set({ email: e.target.value })} placeholder="tu@correo.com" /></Field>
           </>)}
 
@@ -274,7 +403,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
           )}
 
           {step === 2 && (<>
-            <Field label={t('Placa', 'Plate')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={draft.plate || ''} onChange={(e) => set({ plate: e.target.value })} placeholder="ABC-123" /></Field>
+            <Field label={t('Placa', 'Plate')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={draft.plate || ''} onChange={(e) => set({ plate: e.target.value })} placeholder="P 1234" /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label={t('Marca', 'Make')}><input className="input" value={draft.brand || ''} onChange={(e) => set({ brand: e.target.value })} placeholder="Yamaha" /></Field>
               <Field label={t('Modelo', 'Model')}><input className="input" value={draft.model || ''} onChange={(e) => set({ model: e.target.value })} placeholder="—" /></Field>
@@ -311,6 +440,25 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
                 </button>
               );
             })}
+
+            {/* create the account password — the phone number is the username */}
+            <div style={{ marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+              <div style={{ fontWeight: 600, fontSize: 14.5, marginBottom: 2 }}>{t('Crea tu contraseña', 'Create your password')}</div>
+              <p style={{ margin: '0 0 12px', fontSize: 12.5, color: 'var(--ink-500)', lineHeight: 1.45 }}>
+                {t('Tu número de celular será tu usuario para iniciar sesión.',
+                   'Your mobile number will be your username to sign in.')}
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 9, background: 'var(--surface-2)', marginBottom: 10 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Usuario', 'Username')}</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, marginLeft: 'auto' }}>{draft.phone || t('(agrega tu celular)', '(add your mobile)')}</span>
+              </div>
+              <input className="input" type="password" autoComplete="new-password" value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t('Contraseña (mín. 6 caracteres)', 'Password (min. 6 characters)')} />
+              {password.length > 0 && password.trim().length < 6 && (
+                <div style={{ fontSize: 12, color: 'var(--red-ink)', marginTop: 6 }}>{t('Mínimo 6 caracteres.', 'At least 6 characters.')}</div>
+              )}
+            </div>
           </>)}
 
           {step === 4 && (
@@ -342,7 +490,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
             <div className="card" style={{ padding: '4px 16px 12px' }}>
               {[
                 [t('Nombre', 'Name'), draft.name || '—'],
-                [t('Cédula', 'ID'), draft.cedula || '—'],
+                [t('Documento', 'ID'), draft.cedula || '—'],
                 [t('Vehículo', 'Vehicle'), `${VEHICLES.find((v) => v.id === draft.vehicle)?.[lang === 'es' ? 'es' : 'en'] || '—'} · ${draft.plate || '—'}`],
                 [t('Documentos', 'Documents'), `${Object.values(draft.docs || {}).filter(Boolean).length} ${t('cargados', 'uploaded')}`],
                 [t('Zonas', 'Zones'), (draft.zones || []).join(', ') || '—'],
@@ -374,10 +522,10 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
 }
 
 // ── root ────────────────────────────────────────────────────────
-type View = 'loading' | 'welcome' | 'wizard' | 'pending';
+type View = 'loading' | 'welcome' | 'requirements' | 'wizard' | 'pending';
 
 export function App() {
-  const [lang, setLang] = useState<Lang>('es');
+  const [lang, setLang] = useState<Lang>('en');
   const [view, setView] = useState<View>('loading');
   const [ref, setRef] = useState<{ id: string; token: string } | null>(null);
   const [draft, setDraft] = useState<any>(null);
@@ -404,12 +552,16 @@ export function App() {
       .catch(() => { session.clear(); setView('welcome'); });
   }, []);
 
+  // called only after the applicant accepts the requirements + terms of service
   const start = async () => {
     const r = await api.create();
     const s = { id: r.id, token: r.resumeToken };
     session.set(s);
     setRef(s);
-    setDraft({});
+    // record the acceptance on the application (auditable, retained on submit)
+    const acceptance = { termsAcceptedAt: new Date().toISOString(), termsVersion: TERMS_VERSION };
+    setDraft(acceptance);
+    try { await api.patch(r.id, r.resumeToken, acceptance); } catch { /* offline tolerated */ }
     setView('wizard');
   };
 
@@ -426,7 +578,8 @@ export function App() {
   return (
     <I18nCtx.Provider value={i18n}>
       {view === 'loading' && <Phone><div /></Phone>}
-      {view === 'welcome' && <Welcome onStart={start} />}
+      {view === 'welcome' && <Welcome onStart={() => setView('requirements')} />}
+      {view === 'requirements' && <Requirements onAccept={start} onBack={() => setView('welcome')} />}
       {view === 'wizard' && ref && (
         <Wizard appId={ref.id} token={ref.token} initialDraft={draft}
           onSubmitted={(app) => { setSubmitted({ reference: app.reference }); setView('pending'); }}

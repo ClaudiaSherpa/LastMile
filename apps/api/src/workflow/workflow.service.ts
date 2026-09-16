@@ -293,14 +293,23 @@ export class WorkflowService {
       relations: { stage: true },
       order: { createdAt: 'ASC' },
     });
+    const draft = app.draft ?? {};
     return {
       ...this.row(app),
       draft: app.driver ? undefined : app.draft,
+      // Terms-of-Service acceptance recorded at apply time (kept on the application draft).
+      terms: {
+        acceptedAt: draft.termsAcceptedAt ?? null,
+        version: draft.termsVersion ?? null,
+      },
       documents: docs.map((d) => ({
+        id: d.id,
         key: d.documentType.key,
-        name: d.documentType.nameEs,
+        name: d.documentType.nameEn,
         status: d.status,
         expiryDate: d.expiryDate,
+        issueDate: d.issueDate,
+        hasFile: !!d.fileRef,
       })),
       history: tasks.map((t) => ({
         stage: t.stage?.nameEs,

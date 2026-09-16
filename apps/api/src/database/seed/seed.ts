@@ -30,7 +30,7 @@ import {
   User,
   Vehicle,
 } from '../entities';
-import { ZONES, boxPolygon, point, zoneBySlug } from './bogota';
+import { ZONES, boxPolygon, point, zoneBySlug } from './barbados';
 
 const TIERS = [
   { tier: DriverTier.ELITE, min: 92 },
@@ -42,7 +42,7 @@ const tierFor = (s: number) => TIERS.find((t) => s >= t.min)!.tier;
 
 async function run() {
   const ds = await AppDataSource.initialize();
-  console.log('▶ seeding Sherpa LM …');
+  console.log('▶ seeding PasarEx LM …');
 
   // wipe (idempotent reseed) — order respects FKs
   await ds.query(`
@@ -58,11 +58,11 @@ async function run() {
   // ── DocumentTypes (CONFIG) ───────────────────────────────────
   const docTypeRepo = ds.getRepository(DocumentType);
   const docTypes = await docTypeRepo.save([
-    docTypeRepo.create({ key: 'license', nameEs: 'Licencia de conducción', nameEn: "Driver's license", appliesTo: DocAppliesTo.DRIVER, required: true, tracksExpiry: true, reminderOffsets: [30, 15, 3], sortOrder: 1 }),
-    docTypeRepo.create({ key: 'soat', nameEs: 'SOAT vigente', nameEn: 'SOAT (mandatory insurance)', appliesTo: DocAppliesTo.VEHICLE, required: true, tracksExpiry: true, reminderOffsets: [30, 15, 3], sortOrder: 2 }),
-    docTypeRepo.create({ key: 'insurance', nameEs: 'Póliza todo riesgo', nameEn: 'All-risk policy', appliesTo: DocAppliesTo.VEHICLE, required: false, tracksExpiry: true, reminderOffsets: [30, 15], sortOrder: 3 }),
-    docTypeRepo.create({ key: 'property', nameEs: 'Tarjeta de propiedad', nameEn: 'Vehicle registration', appliesTo: DocAppliesTo.VEHICLE, required: true, tracksExpiry: false, sortOrder: 4 }),
-    docTypeRepo.create({ key: 'id', nameEs: 'Cédula + selfie', nameEn: 'ID + selfie', appliesTo: DocAppliesTo.DRIVER, required: true, tracksExpiry: false, sortOrder: 5 }),
+    docTypeRepo.create({ key: 'license', nameEs: "Driver's licence", nameEn: "Driver's licence", appliesTo: DocAppliesTo.DRIVER, required: true, tracksExpiry: true, reminderOffsets: [30, 15, 3], sortOrder: 1 }),
+    docTypeRepo.create({ key: 'soat', nameEs: 'Compulsory vehicle insurance', nameEn: 'Compulsory vehicle insurance', appliesTo: DocAppliesTo.VEHICLE, required: true, tracksExpiry: true, reminderOffsets: [30, 15, 3], sortOrder: 2 }),
+    docTypeRepo.create({ key: 'insurance', nameEs: 'Comprehensive cover (optional)', nameEn: 'Comprehensive cover (optional)', appliesTo: DocAppliesTo.VEHICLE, required: false, tracksExpiry: true, reminderOffsets: [30, 15], sortOrder: 3 }),
+    docTypeRepo.create({ key: 'property', nameEs: 'Vehicle registration', nameEn: 'Vehicle registration', appliesTo: DocAppliesTo.VEHICLE, required: true, tracksExpiry: false, sortOrder: 4 }),
+    docTypeRepo.create({ key: 'id', nameEs: 'National ID + selfie', nameEn: 'National ID + selfie', appliesTo: DocAppliesTo.DRIVER, required: true, tracksExpiry: false, sortOrder: 5 }),
   ]);
   console.log(`  ✓ ${docTypes.length} document types`);
 
@@ -124,11 +124,11 @@ async function run() {
 
   // ── Staff users ──────────────────────────────────────────────
   const userRepo = ds.getRepository(User);
-  const pw = await argon2.hash('sherpa123');
+  const pw = await argon2.hash('pasarex123');
   await userRepo.save([
-    userRepo.create({ email: 'admin@sherpa-c.com', fullName: 'Admin Sherpa', role: Role.ADMIN, passwordHash: pw }),
-    userRepo.create({ email: 'dispatch@sherpa-c.com', fullName: 'Despacho Bogotá', role: Role.DISPATCHER, passwordHash: pw }),
-    userRepo.create({ email: 'security@sherpa-c.com', fullName: 'Oficial de Seguridad', role: Role.SECURITY_OFFICER, passwordHash: pw }),
+    userRepo.create({ email: 'admin@pasarex.com', fullName: 'PasarEx Admin', role: Role.ADMIN, passwordHash: pw }),
+    userRepo.create({ email: 'dispatch@pasarex.com', fullName: 'Bridgetown Dispatch', role: Role.DISPATCHER, passwordHash: pw }),
+    userRepo.create({ email: 'security@pasarex.com', fullName: 'Security Officer', role: Role.SECURITY_OFFICER, passwordHash: pw }),
   ]);
   console.log('  ✓ staff users (admin/dispatch/security)');
 
@@ -139,11 +139,11 @@ async function run() {
   const profilesByEmail: Record<string, DriverProfile> = {};
 
   const activeDrivers = [
-    { name: 'Aurelio Quintero', email: 'aurelio@drv.co', vehicle: VehicleType.MOTO, plate: 'KXR-21F', score: 96, zone: 'chapinero', zones: ['chapinero', 'chico', 'usaquen'], status: DriverStatus.IDLE, deliveries: 1284, accept: 98, onTime: 99, rating: 4.9 },
-    { name: 'Marisol Vega', email: 'marisol@drv.co', vehicle: VehicleType.CARRO, plate: 'GHT-845', score: 88, zone: 'teusaquillo', zones: ['teusaquillo', 'centro', 'kennedy'], status: DriverStatus.DELIVERING, deliveries: 642, accept: 91, onTime: 94, rating: 4.6 },
-    { name: 'Bernardo Ruiz', email: 'bernardo@drv.co', vehicle: VehicleType.VAN, plate: 'WPL-302', score: 83, zone: 'kennedy', zones: ['kennedy', 'fontibon', 'bosa'], status: DriverStatus.IDLE, deliveries: 410, accept: 86, onTime: 89, rating: 4.4 },
-    { name: 'Camila Ardila', email: 'camila@drv.co', vehicle: VehicleType.MOTO, plate: 'JDR-77E', score: 74, zone: 'suba', zones: ['suba', 'engativa'], status: DriverStatus.IDLE, deliveries: 188, accept: 79, onTime: 85, rating: 4.1 },
-    { name: 'Héctor Paz', email: 'hector@drv.co', vehicle: VehicleType.CAMIONETA, plate: 'TBN-019', score: 91, zone: 'usaquen', zones: ['usaquen', 'chico'], status: DriverStatus.IDLE, deliveries: 523, accept: 93, onTime: 96, rating: 4.7 },
+    { name: 'Andre Griffith', email: 'andre@drv.co', vehicle: VehicleType.MOTO, plate: 'P 4821', score: 96, zone: 'st_michael', zones: ['st_michael', 'st_george', 'christ_church'], status: DriverStatus.IDLE, deliveries: 1284, accept: 98, onTime: 99, rating: 4.9 },
+    { name: 'Shanice Boyce', email: 'shanice@drv.co', vehicle: VehicleType.CARRO, plate: 'H 2093', score: 88, zone: 'christ_church', zones: ['christ_church', 'st_michael', 'st_philip'], status: DriverStatus.DELIVERING, deliveries: 642, accept: 91, onTime: 94, rating: 4.6 },
+    { name: 'Rohan Clarke', email: 'rohan@drv.co', vehicle: VehicleType.VAN, plate: 'B 1147', score: 83, zone: 'st_philip', zones: ['st_philip', 'st_john', 'st_george'], status: DriverStatus.IDLE, deliveries: 410, accept: 86, onTime: 89, rating: 4.4 },
+    { name: 'Kimberly Weekes', email: 'kimberly@drv.co', vehicle: VehicleType.MOTO, plate: 'P 7758', score: 74, zone: 'st_peter', zones: ['st_peter', 'st_lucy', 'st_andrew'], status: DriverStatus.IDLE, deliveries: 188, accept: 79, onTime: 85, rating: 4.1 },
+    { name: 'Marcus Belgrave', email: 'marcus@drv.co', vehicle: VehicleType.CAMIONETA, plate: 'P 3310', score: 91, zone: 'st_thomas', zones: ['st_thomas', 'st_james', 'st_michael'], status: DriverStatus.IDLE, deliveries: 523, accept: 93, onTime: 96, rating: 4.7 },
   ];
 
   for (const d of activeDrivers) {
@@ -191,21 +191,21 @@ async function run() {
     return d.toISOString().slice(0, 10);
   };
   await docRepo.save([
-    // Marisol: SOAT expiring soon (reminder demo) + license further out
-    docRepo.create({ driver: profilesByEmail['marisol@drv.co'], documentType: dt('soat'), status: DocumentStatus.APPROVED, expiryDate: isoIn(10) }),
-    docRepo.create({ driver: profilesByEmail['marisol@drv.co'], documentType: dt('license'), status: DocumentStatus.APPROVED, expiryDate: isoIn(40) }),
-    // Camila: already-lapsed required SOAT — a scan will expire it and auto-suspend her
-    docRepo.create({ driver: profilesByEmail['camila@drv.co'], documentType: dt('soat'), status: DocumentStatus.APPROVED, expiryDate: isoIn(-5) }),
-    docRepo.create({ driver: profilesByEmail['camila@drv.co'], documentType: dt('license'), status: DocumentStatus.APPROVED, expiryDate: isoIn(120) }),
+    // Shanice: insurance expiring soon (reminder demo) + licence further out
+    docRepo.create({ driver: profilesByEmail['shanice@drv.co'], documentType: dt('soat'), status: DocumentStatus.APPROVED, expiryDate: isoIn(10) }),
+    docRepo.create({ driver: profilesByEmail['shanice@drv.co'], documentType: dt('license'), status: DocumentStatus.APPROVED, expiryDate: isoIn(40) }),
+    // Kimberly: already-lapsed required insurance — a scan will expire it and auto-suspend her
+    docRepo.create({ driver: profilesByEmail['kimberly@drv.co'], documentType: dt('soat'), status: DocumentStatus.APPROVED, expiryDate: isoIn(-5) }),
+    docRepo.create({ driver: profilesByEmail['kimberly@drv.co'], documentType: dt('license'), status: DocumentStatus.APPROVED, expiryDate: isoIn(120) }),
   ]);
   console.log('  ✓ tracked documents with expiries (compliance demo)');
 
   // ── Pending applications (Ops security queue) ────────────────
   const appRepo = ds.getRepository(Application);
   const pending = [
-    { ref: 'AP-7741', name: 'Lucía Granados', vehicle: VehicleType.MOTO, plate: 'FNK-552', zones: ['suba', 'engativa'], checks: { identity: SecurityCheckResult.PASS, criminal: SecurityCheckResult.PENDING, sanctions: SecurityCheckResult.PASS, vehicle: SecurityCheckResult.PASS } },
-    { ref: 'AP-7742', name: 'Óscar Beltrán', vehicle: VehicleType.CAMIONETA, plate: 'RQS-118', zones: ['kennedy', 'bosa', 'fontibon'], checks: { identity: SecurityCheckResult.PASS, criminal: SecurityCheckResult.PASS, sanctions: SecurityCheckResult.FLAG, vehicle: SecurityCheckResult.PASS } },
-    { ref: 'AP-7740', name: 'Daniela Forero', vehicle: VehicleType.CARRO, plate: 'MZP-740', zones: ['chapinero', 'chico'], checks: { identity: SecurityCheckResult.PASS, criminal: SecurityCheckResult.PASS, sanctions: SecurityCheckResult.PASS, vehicle: SecurityCheckResult.PENDING } },
+    { ref: 'AP-7741', name: 'Latoya Holder', vehicle: VehicleType.MOTO, plate: 'P 5521', zones: ['st_peter', 'st_lucy'], checks: { identity: SecurityCheckResult.PASS, criminal: SecurityCheckResult.PENDING, sanctions: SecurityCheckResult.PASS, vehicle: SecurityCheckResult.PASS } },
+    { ref: 'AP-7742', name: 'Devon Gittens', vehicle: VehicleType.CAMIONETA, plate: 'P 1180', zones: ['st_philip', 'st_john', 'st_george'], checks: { identity: SecurityCheckResult.PASS, criminal: SecurityCheckResult.PASS, sanctions: SecurityCheckResult.FLAG, vehicle: SecurityCheckResult.PASS } },
+    { ref: 'AP-7740', name: 'Alisha Blackman', vehicle: VehicleType.CARRO, plate: 'H 7402', zones: ['st_michael', 'christ_church'], checks: { identity: SecurityCheckResult.PASS, criminal: SecurityCheckResult.PASS, sanctions: SecurityCheckResult.PASS, vehicle: SecurityCheckResult.PENDING } },
   ];
   for (const a of pending) {
     await appRepo.save(
@@ -229,9 +229,9 @@ async function run() {
   const freightRepo = ds.getRepository(Freight);
   let seq = 4820;
   const freights = [
-    { client: 'Farmadrid', pickup: 'chico', drop: 'usaquen', vehicle: VehicleType.MOTO, weight: 6, payout: 18400, distance: 4.2, window: 30, priority: true },
-    { client: 'Mercaldas', pickup: 'teusaquillo', drop: 'kennedy', vehicle: VehicleType.CARRO, weight: 32, payout: 29900, distance: 9.1, window: 60, priority: false },
-    { client: 'Corabastos Pro', pickup: 'fontibon', drop: 'bosa', vehicle: VehicleType.VAN, weight: 210, payout: 74500, distance: 12.7, window: 120, priority: false },
+    { client: 'Fresh Market', pickup: 'st_michael', drop: 'st_george', vehicle: VehicleType.MOTO, weight: 6, payout: 18, distance: 4.2, window: 30, priority: true },
+    { client: 'Massy Stores', pickup: 'christ_church', drop: 'st_michael', vehicle: VehicleType.CARRO, weight: 32, payout: 32, distance: 9.1, window: 60, priority: false },
+    { client: 'Cost-U-Less', pickup: 'st_philip', drop: 'st_john', vehicle: VehicleType.VAN, weight: 210, payout: 85, distance: 12.7, window: 120, priority: false },
   ];
   for (const f of freights) {
     const p = zoneBySlug(f.pickup)!;
@@ -240,8 +240,8 @@ async function run() {
       freightRepo.create({
         reference: 'F-' + seq++,
         client: f.client,
-        consigneeName: 'Cliente ' + f.client,
-        consigneePhone: '+57 30' + Math.floor(Math.random() * 90000000 + 10000000),
+        consigneeName: 'Customer ' + f.client,
+        consigneePhone: '+1246' + Math.floor(Math.random() * 9000000 + 1000000),
         pickupZone: f.pickup,
         dropZone: f.drop,
         pickupPoint: point(p.lng, p.lat),
@@ -259,7 +259,7 @@ async function run() {
   console.log(`  ✓ ${freights.length} sample freights`);
 
   await ds.destroy();
-  console.log('✅ seed complete — login with admin@sherpa-c.com / sherpa123');
+  console.log('✅ seed complete — login with admin@pasarex.com / pasarex123');
 }
 
 run().catch((e) => {

@@ -32,8 +32,8 @@ const statusBadge: Record<string, string> = {
 // ── login ───────────────────────────────────────────────────────
 function Login({ onDone }: { onDone: () => void }) {
   const { t } = useI18n();
-  const [email, setEmail] = useState('dispatch@sherpa-c.com');
-  const [password, setPassword] = useState('sherpa123');
+  const [email, setEmail] = useState('dispatch@pasarex.com');
+  const [password, setPassword] = useState('pasarex123');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -58,7 +58,7 @@ function Login({ onDone }: { onDone: () => void }) {
       <form onSubmit={submit} className="card" style={{ width: 380, padding: 28, position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--brand)' }} />
-          <span className="display" style={{ fontSize: 18, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand-600)' }}>LM</span> · Ops</span>
+          <span className="display" style={{ fontSize: 18, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span> · Ops</span>
         </div>
         <label className="field-label">{t('Correo', 'Email')}</label>
         <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} style={{ marginBottom: 12 }} />
@@ -69,7 +69,7 @@ function Login({ onDone }: { onDone: () => void }) {
           {busy ? '…' : t('Ingresar', 'Sign in')}
         </button>
         <p style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 14, textAlign: 'center' }}>
-          admin · dispatch · security @sherpa-c.com / sherpa123
+          admin · dispatch · security @pasarex.com / pasarex123
         </p>
       </form>
     </div>
@@ -84,31 +84,136 @@ const TABS = [
   ['compliance', 'Cumplimiento', 'Compliance'],
   ['freight', 'Fletes', 'Freight'],
   ['drivers', 'Conductores', 'Drivers'],
+  ['messages', 'Mensajes', 'Messages'],
   ['config', 'Configuración', 'Config'],
 ] as const;
 
-// Bogotá bounding box -> 0..100% map space
-const BOGOTA = { minLng: -74.2, maxLng: -74.0, minLat: 4.55, maxLat: 4.78 };
+// tabs only some roles may open (others are visible to all staff)
+const TAB_ROLES: Record<string, string[]> = {
+  config: ['admin'],
+  messages: ['admin', 'dispatcher'],
+};
+
+// Barbados bounding box -> 0..100% map space
+const BARBADOS = { minLng: -59.66, maxLng: -59.42, minLat: 13.04, maxLat: 13.34 };
 const toXY = (lng: number, lat: number) => ({
-  x: Math.max(0, Math.min(100, ((lng - BOGOTA.minLng) / (BOGOTA.maxLng - BOGOTA.minLng)) * 100)),
-  y: Math.max(0, Math.min(100, (1 - (lat - BOGOTA.minLat) / (BOGOTA.maxLat - BOGOTA.minLat)) * 100)),
+  x: Math.max(0, Math.min(100, ((lng - BARBADOS.minLng) / (BARBADOS.maxLng - BARBADOS.minLng)) * 100)),
+  y: Math.max(0, Math.min(100, (1 - (lat - BARBADOS.minLat) / (BARBADOS.maxLat - BARBADOS.minLat)) * 100)),
 });
 const tierColor: Record<string, string> = { elite: 'var(--brand)', preferente: 'var(--blue)', estandar: 'var(--ink-500)', nuevo: 'var(--amber)' };
+
+const waStatusBadge: Record<string, string> = { sent: 'badge-brand', received: 'badge-blue', failed: 'badge-red', skipped: 'badge-amber' };
+
+function Messages() {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<any[]>([]);
+  const [to, setTo] = useState('');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const { connected } = useRoom('ops');
+
+  useEffect(() => { api.whatsappMessages().then(setRows).catch(() => {}); }, []);
+  useEvent('whatsapp.message', useCallback((m: any) => {
+    setRows((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
+  }, []));
+
+  const send = async () => {
+    if (!to.trim() || !text.trim()) return;
+    setBusy(true); setNote('');
+    try {
+      const m = await api.whatsappSend(to.trim(), text.trim());
+      setRows((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
+      setText('');
+      if (m.status === 'skipped') setNote(t('Sin EVOLUTION_API_KEY — el mensaje se registró pero no se envió.', 'No EVOLUTION_API_KEY — message logged but not sent.'));
+      else if (m.status === 'failed') setNote(t('Falló el envío — revisa la configuración de Evolution.', 'Send failed — check the Evolution configuration.'));
+    } catch (e: any) { setNote(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {/* composer */}
+      <div className="card" style={{ width: 340, maxWidth: '100%', flexShrink: 0, padding: 18 }}>
+        <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Enviar WhatsApp', 'Send WhatsApp')}</div>
+        <label className="field-label">{t('Número', 'Number')}</label>
+        <input className="input mono" value={to} onChange={(e) => setTo(e.target.value)} placeholder="+1 246 555 0100" style={{ marginBottom: 10 }} />
+        <label className="field-label">{t('Mensaje', 'Message')}</label>
+        <textarea className="textarea" rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Escribe un mensaje…', 'Type a message…')} style={{ marginBottom: 10 }} />
+        {note && <div className="badge badge-amber" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+        <button className="btn btn-primary btn-block" disabled={busy || !to.trim() || !text.trim()} onClick={send}>{busy ? '…' : t('Enviar', 'Send')}</button>
+        <p style={{ fontSize: 11.5, color: 'var(--ink-500)', marginTop: 12, lineHeight: 1.45 }}>
+          {t('Requiere EVOLUTION_API_KEY y una instancia conectada. Los mensajes entrantes llegan por webhook.',
+             'Requires EVOLUTION_API_KEY and a connected instance. Inbound messages arrive via webhook.')}
+        </p>
+      </div>
+
+      {/* log */}
+      <div style={{ flex: 1, minWidth: 260, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="eyebrow">{t('Conversaciones', 'Message log')}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
+            <span className="mono" style={{ color: 'var(--ink-500)' }}>{connected ? 'WS' : '—'}</span>
+          </span>
+        </div>
+        {!rows.length && <div className="card" style={{ padding: 16, color: 'var(--ink-500)', fontSize: 13 }}>{t('Sin mensajes todavía.', 'No messages yet.')}</div>}
+        {rows.map((m) => {
+          const out = m.direction === 'out';
+          return (
+            <div key={m.id} className="card" style={{ padding: 12, borderLeft: `3px solid ${out ? 'var(--brand)' : 'var(--blue)'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span className="badge badge-gray">{out ? t('Enviado', 'Outbound') : t('Recibido', 'Inbound')}</span>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--ink-600)' }}>{m.contact}</span>
+                <span className={`badge ${waStatusBadge[m.status] || 'badge-gray'}`} style={{ marginLeft: 'auto' }}>{m.status}</span>
+              </div>
+              <div style={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{m.body}</div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 4 }}>{m.at ? new Date(m.at).toLocaleString() : ''}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function useIsMobile(bp = 820) {
+  const [m, setM] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth <= bp : false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${bp}px)`);
+    const on = () => setM(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [bp]);
+  return m;
+}
 
 function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<string>('dashboard');
+  const isMobile = useIsMobile();
+  const [drawer, setDrawer] = useState(false);
+  const pick = (id: string) => { setTab(id); setDrawer(false); };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--paper)' }}>
-      {/* sidebar */}
-      <div style={{ width: 230, flexShrink: 0, background: 'var(--ink-900)', color: '#fff', display: 'flex', flexDirection: 'column', padding: 16 }}>
+    <div style={{ display: 'flex', height: '100vh', maxHeight: '100dvh', background: 'var(--paper)' }}>
+      {/* sidebar — fixed off-canvas drawer on mobile, static column on desktop */}
+      <div style={{
+        width: 230, flexShrink: 0, background: 'var(--ink-900)', color: '#fff',
+        display: 'flex', flexDirection: 'column', padding: 16,
+        ...(isMobile ? {
+          position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 50, width: 250,
+          transform: drawer ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform .25s ease', boxShadow: drawer ? 'var(--shadow-lg)' : 'none',
+        } : {}),
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, padding: '4px 6px' }}>
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--brand)' }} />
-          <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>Sherpa<span style={{ color: 'var(--brand)' }}>LM</span></span>
+          <span className="display" style={{ fontSize: 16, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand)' }}>LM</span></span>
         </div>
-        {TABS.filter(([id]) => id !== 'config' || me?.role === 'admin').map(([id, es, en]) => (
-          <button key={id} onClick={() => setTab(id)}
+        {TABS.filter(([id]) => !TAB_ROLES[id] || TAB_ROLES[id].includes(me?.role)).map(([id, es, en]) => (
+          <button key={id} onClick={() => pick(id)}
             style={{ textAlign: 'left', border: 'none', borderRadius: 9, padding: '10px 12px', marginBottom: 4,
               fontSize: 14, fontWeight: 600, background: tab === id ? 'var(--brand)' : 'transparent',
               color: tab === id ? '#063' : 'rgba(255,255,255,.65)' }}>
@@ -122,25 +227,34 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           </button>
         </div>
       </div>
+      {isMobile && drawer && (
+        <div onClick={() => setDrawer(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 40 }} />
+      )}
 
       {/* main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid var(--line)', background: 'var(--surface)' }}>
-          <div>
-            <span className="eyebrow">{t('Operaciones · Bogotá', 'Operations · Bogotá')}</span>
-            <h1 className="display" style={{ fontSize: 22, margin: '2px 0 0' }}>
-              {t(TABS.find((x) => x[0] === tab)![1], TABS.find((x) => x[0] === tab)![2])}
-            </h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: isMobile ? '12px 16px' : '16px 24px', borderBottom: '1px solid var(--line)', background: 'var(--surface)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {isMobile && (
+              <button onClick={() => setDrawer(true)} aria-label="Menu" className="btn btn-ghost" style={{ padding: '7px 11px', fontSize: 17, lineHeight: 1 }}>☰</button>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <span className="eyebrow">{t('Operaciones · Barbados', 'Operations · Barbados')}</span>
+              <h1 className="display" style={{ fontSize: isMobile ? 18 : 22, margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {t(TABS.find((x) => x[0] === tab)![1], TABS.find((x) => x[0] === tab)![2])}
+              </h1>
+            </div>
           </div>
           <LangToggle />
         </div>
-        <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+        <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
           {tab === 'dashboard' && <Dashboard />}
           {tab === 'map' && <LiveMap />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'compliance' && <Compliance />}
           {tab === 'freight' && <FreightScreen />}
           {tab === 'drivers' && <Drivers />}
+          {tab === 'messages' && <Messages />}
           {tab === 'config' && <Config />}
         </div>
       </div>
@@ -165,7 +279,7 @@ function Dashboard() {
   if (!o) return <div style={{ color: 'var(--ink-500)' }}>…</div>;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16 }}>
         <Kpi label={t('Conductores', 'Drivers')} value={o.drivers} sub={`${o.driversMoving} ${t('en movimiento', 'moving')}`} />
         <Kpi label={t('Solicitudes', 'Applications')} value={o.applications} sub={t('en cola', 'in queue')} />
         <Kpi label={t('Fletes', 'Freight')} value={o.freights} sub={t('disponibles', 'available')} />
@@ -186,12 +300,57 @@ function Dashboard() {
 const CHECK_RESULTS = ['pass', 'flag', 'pending', 'fail'] as const;
 const checkBadge: Record<string, string> = { pass: 'badge-brand', flag: 'badge-red', fail: 'badge-red', pending: 'badge-gray' };
 
+// Full-screen viewer for a submitted document (image or PDF), fetched with auth.
+function DocViewer({ docId, name, onClose }: { docId: string; name: string; onClose: () => void }) {
+  const { t } = useI18n();
+  const [url, setUrl] = useState<string | null>(null);
+  const [kind, setKind] = useState<'image' | 'pdf' | 'other'>('other');
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let obj: string | null = null;
+    let live = true;
+    setUrl(null); setErr(false);
+    api.documentFileBlob(docId)
+      .then((blob) => {
+        if (!live) return;
+        obj = URL.createObjectURL(blob);
+        setKind(blob.type.startsWith('image/') ? 'image' : blob.type === 'application/pdf' ? 'pdf' : 'other');
+        setUrl(obj);
+      })
+      .catch(() => live && setErr(true));
+    return () => { live = false; if (obj) URL.revokeObjectURL(obj); };
+  }, [docId]);
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 100, display: 'grid', placeItems: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: 'min(880px, 96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+          <strong style={{ fontSize: 14 }}>{name}</strong>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {url && <a className="btn btn-ghost" style={{ padding: '5px 11px' }} href={url} download={name}>{t('Descargar', 'Download')}</a>}
+            <button className="btn btn-ghost" style={{ padding: '5px 11px' }} onClick={onClose}>✕</button>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', display: 'grid', placeItems: 'center', background: 'var(--surface-2)', minHeight: 320 }}>
+          {err && <span className="badge badge-red">{t('No se pudo cargar el archivo', 'Failed to load file')}</span>}
+          {!err && !url && <span style={{ color: 'var(--ink-500)' }}>…</span>}
+          {url && kind === 'image' && <img src={url} alt={name} style={{ maxWidth: '100%', maxHeight: '82vh', display: 'block' }} />}
+          {url && kind === 'pdf' && <iframe title={name} src={url} style={{ width: '100%', height: '82vh', border: 'none' }} />}
+          {url && kind === 'other' && <a className="btn btn-primary" href={url} download={name}>{t('Descargar archivo', 'Download file')}</a>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Approvals({ role }: { role?: string }) {
   const { t, lang } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
   const [sel, setSel] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
+  const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
 
   const load = () => api.queue().then(setRows).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -218,7 +377,7 @@ function Approvals({ role }: { role?: string }) {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       {/* queue */}
       <div style={{ flex: 1, display: 'grid', gap: 12, minWidth: 0 }}>
         {rows.map((a) => (
@@ -241,7 +400,7 @@ function Approvals({ role }: { role?: string }) {
 
       {/* review panel */}
       {sel && (
-        <div className="card" style={{ width: 380, flexShrink: 0, padding: 20, position: 'sticky', top: 0 }}>
+        <div className="card" style={{ width: 380, maxWidth: '100%', flexShrink: 0, padding: 20, position: 'sticky', top: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="eyebrow">{sel.reference}</span>
             <button onClick={() => setSel(null)} className="btn btn-ghost" style={{ padding: '4px 10px' }}>✕</button>
@@ -272,14 +431,35 @@ function Approvals({ role }: { role?: string }) {
           </div>
 
           <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Documentos', 'Documents')}</div>
-          <div style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
             {(sel.documents || []).map((d: any) => (
-              <div key={d.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                <span>{d.name}</span>
-                <span className={`badge ${d.status === 'approved' ? 'badge-brand' : d.status === 'rejected' || d.status === 'expired' ? 'badge-red' : 'badge-gray'}`}>{d.status}</span>
+              <div key={d.id || d.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+                  {d.expiryDate && <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{t('Vence', 'Expires')} {d.expiryDate}</div>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <span className={`badge ${d.status === 'approved' ? 'badge-brand' : d.status === 'rejected' || d.status === 'expired' ? 'badge-red' : 'badge-gray'}`}>{d.status}</span>
+                  {d.hasFile
+                    ? <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setViewDoc({ id: d.id, name: d.name })}>{t('Ver', 'View')}</button>
+                    : <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)' }}>{t('sin archivo', 'no file')}</span>}
+                </div>
               </div>
             ))}
             {!sel.documents?.length && <span style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Solicitud de demostración (sin documentos)', 'Demo application (no documents)')}</span>}
+          </div>
+
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Términos de servicio', 'Terms of service')}</div>
+          <div style={{ marginBottom: 16 }}>
+            {sel.terms?.acceptedAt ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+                <span className="badge badge-brand">{t('Aceptados', 'Accepted')}</span>
+                {sel.terms.version && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>v{sel.terms.version}</span>}
+                <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{new Date(sel.terms.acceptedAt).toLocaleString()}</span>
+              </div>
+            ) : (
+              <span className="badge badge-amber">{t('No registrados', 'Not recorded')}</span>
+            )}
           </div>
 
           {canDecide ? (<>
@@ -296,6 +476,7 @@ function Approvals({ role }: { role?: string }) {
           )}
         </div>
       )}
+      {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
     </div>
   );
 }
@@ -368,9 +549,99 @@ function Compliance() {
   );
 }
 
+// ── driver delivery breakdown (map dot / driver row detail) ─────
+function StatTile({ label, value, accent }: { label: string; value: number; accent: string }) {
+  return (
+    <div className="card" style={{ padding: '12px 14px' }}>
+      <div className="eyebrow">{label}</div>
+      <div className="display" style={{ fontSize: 26, margin: '4px 0 0', color: accent }}>{value}</div>
+    </div>
+  );
+}
+
+function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; name?: string; sub?: string; onClose: () => void }) {
+  const { t } = useI18n();
+  const [stats, setStats] = useState<{ assigned: number; delivered: number; pending: number; failed: number } | null>(null);
+  const [docs, setDocs] = useState<Awaited<ReturnType<typeof api.driverDocuments>> | null>(null);
+  const [err, setErr] = useState(false);
+  const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setStats(null); setDocs(null); setErr(false); setViewDoc(null);
+    api.driverStats(driverId).then((s) => live && setStats(s)).catch(() => live && setErr(true));
+    api.driverDocuments(driverId).then((d) => live && setDocs(d)).catch(() => {});
+    return () => { live = false; };
+  }, [driverId]);
+
+  const docBadge = (s: string) => s === 'approved' ? 'badge-brand' : s === 'rejected' || s === 'expired' ? 'badge-red' : 'badge-gray';
+
+  return (
+    <div className="card" style={{ width: 320, maxWidth: '100%', flexShrink: 0, padding: 18, position: 'sticky', top: 0, maxHeight: '88vh', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span className="eyebrow">{t('Conductor', 'Driver')}</span>
+        <button onClick={onClose} className="btn btn-ghost" style={{ padding: '4px 10px' }}>✕</button>
+      </div>
+      {name && <div style={{ fontWeight: 600, fontSize: 15.5, marginTop: 6 }}>{name}</div>}
+      {sub && <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>{sub}</div>}
+      {docs?.driver?.phone && (
+        <div style={{ marginTop: 6, fontSize: 13 }}>
+          <span style={{ color: 'var(--ink-500)' }}>{t('Teléfono', 'Phone')}: </span>
+          <a className="mono" href={`tel:${docs.driver.phone}`} style={{ color: 'var(--brand-ink)', textDecoration: 'none' }}>{docs.driver.phone}</a>
+        </div>
+      )}
+
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Entregas', 'Deliveries')}</div>
+      {err && <div className="badge badge-red">{t('No se pudo cargar', 'Failed to load')}</div>}
+      {!stats && !err && <div style={{ color: 'var(--ink-500)', fontSize: 13 }}>…</div>}
+      {stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <StatTile label={t('Asignados', 'Assigned')} value={stats.assigned} accent="var(--ink-900)" />
+          <StatTile label={t('Entregados', 'Delivered')} value={stats.delivered} accent="var(--brand-ink)" />
+          <StatTile label={t('Pendientes', 'Pending')} value={stats.pending} accent="var(--blue-ink)" />
+          <StatTile label={t('Fallidos', 'Failed')} value={stats.failed} accent="var(--red-ink)" />
+        </div>
+      )}
+
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Documentos', 'Documents')}</div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {(docs?.documents || []).map((d) => (
+          <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
+              {d.expiryDate && <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{t('Vence', 'Expires')} {d.expiryDate}</div>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span className={`badge ${docBadge(d.status)}`}>{d.status}</span>
+              {d.hasFile
+                ? <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setViewDoc({ id: d.id, name: d.name })}>{t('Ver', 'View')}</button>
+                : <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)' }}>{t('sin archivo', 'no file')}</span>}
+            </div>
+          </div>
+        ))}
+        {docs && !docs.documents.length && <span style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Sin documentos', 'No documents')}</span>}
+      </div>
+
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Términos de servicio', 'Terms of service')}</div>
+      {docs?.terms?.acceptedAt ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+          <span className="badge badge-brand">{t('Aceptados', 'Accepted')}</span>
+          {docs.terms.version && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>v{docs.terms.version}</span>}
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{new Date(docs.terms.acceptedAt).toLocaleString()}</span>
+        </div>
+      ) : (
+        <span className="badge badge-amber">{t('No registrados', 'Not recorded')}</span>
+      )}
+
+      {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
+    </div>
+  );
+}
+
 function LiveMap() {
   const { t } = useI18n();
   const [drivers, setDrivers] = useState<Record<string, any>>({});
+  const [selected, setSelected] = useState<string | null>(null);
   const { connected } = useRoom('ops');
 
   useEffect(() => {
@@ -398,17 +669,28 @@ function LiveMap() {
           <span className="mono" style={{ color: 'var(--ink-500)' }}>{connected ? 'WS' : '—'}</span>
         </span>
       </div>
-      <div className="card map-grid" style={{ position: 'relative', height: 560, overflow: 'hidden' }}>
-        {list.map((d: any) => {
-          const { x, y } = toXY(d.lng, d.lat);
-          return (
-            <div key={d.id} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)', transition: 'left 1.2s linear, top 1.2s linear' }}>
-              <div style={{ width: 14, height: 14, borderRadius: 99, background: tierColor[d.tier] || 'var(--ink-500)', border: '2px solid #fff', boxShadow: 'var(--shadow)' }} />
-              {d.name && <div className="mono" style={{ fontSize: 10, marginTop: 2, color: 'var(--ink-700)', whiteSpace: 'nowrap', transform: 'translateX(-50%)', marginLeft: 7 }}>{d.name.split(' ')[0]}</div>}
-            </div>
-          );
-        })}
-        {!list.length && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--ink-500)' }}>{t('Sin conductores activos', 'No active drivers')}</div>}
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div className="card map-grid" style={{ position: 'relative', flex: 1, minWidth: 260, height: 560, overflow: 'hidden' }}>
+          {list.map((d: any) => {
+            const { x, y } = toXY(d.lng, d.lat);
+            const on = selected === d.id;
+            return (
+              <button key={d.id} onClick={() => setSelected(on ? null : d.id)} title={d.name}
+                style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)',
+                  transition: 'left 1.2s linear, top 1.2s linear', background: 'none', border: 'none', padding: 0, cursor: 'pointer', zIndex: on ? 5 : 1 }}>
+                <div style={{ width: on ? 18 : 14, height: on ? 18 : 14, borderRadius: 99, background: tierColor[d.tier] || 'var(--ink-500)',
+                  border: on ? '3px solid var(--ink-900)' : '2px solid #fff', boxShadow: on ? '0 0 0 3px var(--brand-tint)' : 'var(--shadow)' }} />
+                {d.name && <div className="mono" style={{ fontSize: 10, marginTop: 2, color: 'var(--ink-700)', whiteSpace: 'nowrap', transform: 'translateX(-50%)', marginLeft: 7 }}>{d.name.split(' ')[0]}</div>}
+              </button>
+            );
+          })}
+          {!list.length && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--ink-500)' }}>{t('Sin conductores activos', 'No active drivers')}</div>}
+        </div>
+        {selected && drivers[selected] && (
+          <DriverStatsPanel driverId={selected} name={drivers[selected].name}
+            sub={[drivers[selected].vehicle, drivers[selected].tier].filter(Boolean).join(' · ')}
+            onClose={() => setSelected(null)} />
+        )}
       </div>
     </div>
   );
@@ -420,7 +702,7 @@ function FreightScreen() {
   const [zones, setZones] = useState<any[]>([]);
   const [feed, setFeed] = useState<any[]>([]);
   const [busy, setBusy] = useState('');
-  const [form, setForm] = useState<any>({ client: '', pickupZone: 'chico', dropZone: 'usaquen', requiredVehicle: 'moto', weightKg: 6, payout: 18000, priority: false });
+  const [form, setForm] = useState<any>({ client: '', pickupZone: 'st_michael', dropZone: 'st_george', requiredVehicle: 'moto', weightKg: 6, payout: 20, priority: false });
   const { connected } = useRoom('ops');
 
   const load = () => api.freight().then(setRows).catch(() => {});
@@ -446,12 +728,12 @@ function FreightScreen() {
   const statusBadgeF: Record<string, string> = { available: 'badge-gray', broadcasting: 'badge-amber', assigned: 'badge-brand', completed: 'badge-blue', cancelled: 'badge-red' };
 
   return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       <div style={{ flex: 1, display: 'grid', gap: 16, minWidth: 0 }}>
         {/* create form */}
         <div className="card" style={{ padding: 18 }}>
           <div className="eyebrow" style={{ marginBottom: 12 }}>{t('Nuevo flete', 'New freight')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
             <input className="input" placeholder={t('Cliente', 'Client')} value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} />
             <select className="select" value={form.pickupZone} onChange={(e) => setForm({ ...form, pickupZone: e.target.value })}>{zones.map((z) => <option key={z.slug} value={z.slug}>{t('Recoge', 'Pick')}: {z.nameEs}</option>)}</select>
             <select className="select" value={form.dropZone} onChange={(e) => setForm({ ...form, dropZone: e.target.value })}>{zones.map((z) => <option key={z.slug} value={z.slug}>{t('Entrega', 'Drop')}: {z.nameEs}</option>)}</select>
@@ -487,7 +769,7 @@ function FreightScreen() {
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: 13 }}>{f.pickupZone} → {f.dropZone}</td>
                   <td style={{ padding: '12px 16px' }}>{f.requiredVehicle}</td>
-                  <td style={{ padding: '12px 16px' }} className="mono">${(f.payout || 0).toLocaleString('es-CO')}</td>
+                  <td style={{ padding: '12px 16px' }} className="mono">Bds${(f.payout || 0).toLocaleString('en-US')}</td>
                   <td style={{ padding: '12px 16px' }}><span className={`badge ${statusBadgeF[f.status] || 'badge-gray'}`}>{f.status}{f.assignedTo ? ` · ${f.assignedTo}` : ''}</span></td>
                   <td style={{ padding: '12px 16px' }}>
                     {(f.status === 'available' || f.status === 'broadcasting') && (
@@ -502,7 +784,7 @@ function FreightScreen() {
       </div>
 
       {/* live feed */}
-      <div className="card" style={{ width: 320, flexShrink: 0, padding: 18 }}>
+      <div className="card" style={{ width: 320, maxWidth: '100%', flexShrink: 0, padding: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <span className="eyebrow">{t('En vivo', 'Live')}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
@@ -534,44 +816,54 @@ function FreightScreen() {
 function Drivers() {
   const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
+  const [sel, setSel] = useState<any>(null);
   useEffect(() => { api.drivers().then(setRows).catch(() => {}); }, []);
   return (
-    <div className="card" style={{ overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-        <thead>
-          <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
-            <th style={{ padding: '10px 16px' }}>{t('Conductor', 'Driver')}</th>
-            <th style={{ padding: '10px 16px' }}>{t('Vehículo', 'Vehicle')}</th>
-            <th style={{ padding: '10px 16px' }}>{t('Nivel', 'Tier')}</th>
-            <th style={{ padding: '10px 16px' }}>{t('Puntaje', 'Score')}</th>
-            <th style={{ padding: '10px 16px' }}>{t('Rating', 'Rating')}</th>
-            <th style={{ padding: '10px 16px' }}>{t('Elegible', 'Eligible')}</th>
-            <th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((d) => (
-            <tr key={d.id} style={{ borderTop: '1px solid var(--line)' }}>
-              <td style={{ padding: '12px 16px', fontWeight: 600 }}>{d.name}
-                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', fontWeight: 400 }}>{d.plate}</div>
-              </td>
-              <td style={{ padding: '12px 16px' }}>{d.vehicle}</td>
-              <td style={{ padding: '12px 16px' }}><span className={`badge ${tierBadge[d.tier] || 'badge-gray'}`}>{d.tier}</span></td>
-              <td style={{ padding: '12px 16px' }} className="mono">{Math.round(d.score)}</td>
-              <td style={{ padding: '12px 16px' }} className="mono">{d.avgRating ? `★ ${Number(d.avgRating).toFixed(1)}` : '—'}</td>
-              <td style={{ padding: '12px 16px' }}><span className={`badge ${d.eligible ? 'badge-brand' : 'badge-red'}`}>{d.eligible ? t('Sí', 'Yes') : 'No'}</span></td>
-              <td style={{ padding: '12px 16px' }}><span className={`badge ${statusBadge[d.status] || 'badge-gray'}`}>{d.status}</span></td>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div className="card" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <thead>
+            <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
+              <th style={{ padding: '10px 16px' }}>{t('Conductor', 'Driver')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Vehículo', 'Vehicle')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Nivel', 'Tier')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Puntaje', 'Score')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Rating', 'Rating')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Elegible', 'Eligible')}</th>
+              <th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.id} onClick={() => setSel(d)}
+                style={{ borderTop: '1px solid var(--line)', cursor: 'pointer',
+                  background: sel?.id === d.id ? 'var(--brand-tint)' : undefined }}>
+                <td style={{ padding: '12px 16px', fontWeight: 600 }}>{d.name}
+                  <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', fontWeight: 400 }}>{d.plate}{d.phone ? ` · ${d.phone}` : ''}</div>
+                </td>
+                <td style={{ padding: '12px 16px' }}>{d.vehicle}</td>
+                <td style={{ padding: '12px 16px' }}><span className={`badge ${tierBadge[d.tier] || 'badge-gray'}`}>{d.tier}</span></td>
+                <td style={{ padding: '12px 16px' }} className="mono">{Math.round(d.score)}</td>
+                <td style={{ padding: '12px 16px' }} className="mono">{d.avgRating ? `★ ${Number(d.avgRating).toFixed(1)}` : '—'}</td>
+                <td style={{ padding: '12px 16px' }}><span className={`badge ${d.eligible ? 'badge-brand' : 'badge-red'}`}>{d.eligible ? t('Sí', 'Yes') : 'No'}</span></td>
+                <td style={{ padding: '12px 16px' }}><span className={`badge ${statusBadge[d.status] || 'badge-gray'}`}>{d.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {sel && (
+        <DriverStatsPanel driverId={sel.id} name={sel.name}
+          sub={[sel.plate, sel.vehicle, sel.tier].filter(Boolean).join(' · ')}
+          onClose={() => setSel(null)} />
+      )}
     </div>
   );
 }
 
 // ── root ────────────────────────────────────────────────────────
 export function App() {
-  const [lang, setLang] = useState<Lang>('es');
+  const [lang, setLang] = useState<Lang>('en');
   const [me, setMe] = useState<any>(null);
   const [ready, setReady] = useState(false);
 

@@ -1,10 +1,17 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
   DeliveryStatus,
   DriverStatus,
   FreightStatus,
+  JwtPayload,
+  Role,
   WS_EVENTS,
 } from '@sherpa/shared';
 import { Delivery, DriverProfile, Freight, LocationPing } from '../database/entities';
@@ -81,12 +88,16 @@ export class TrackingService {
   }
 
   /** Advance a delivery's lifecycle; records the timeline and notifies rooms. */
-  async setStatus(deliveryId: string, status: DeliveryStatus) {
+  async setStatus(deliveryId: string, status: DeliveryStatus, actor: JwtPayload) {
     const delivery = await this.deliveries.findOne({
       where: { id: deliveryId },
       relations: { driver: true, freight: true },
     });
     if (!delivery) throw new NotFoundException('Delivery not found');
+    // a driver may only advance a delivery assigned to them; ops (dispatcher/admin) may advance any
+    if (actor.role === Role.DRIVER && delivery.driver?.id !== actor.driverId) {
+      throw new ForbiddenException('Not your delivery');
+    }
     if (!FLOW.includes(status) && status !== DeliveryStatus.FAILED) {
       throw new BadRequestException('Invalid status');
     }

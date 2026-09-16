@@ -25,7 +25,7 @@ async function bootstrap() {
   );
   await app.listen(env.api.port);
   new Logger('Bootstrap').log(
-    `Sherpa LM API on http://localhost:${env.api.port}/${env.api.prefix}`,
+    `PasarEx LM API on http://localhost:${env.api.port}/${env.api.prefix}`,
   );
 }
 bootstrap();

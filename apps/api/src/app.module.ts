@@ -14,6 +14,8 @@ import { TrackingModule } from './tracking/tracking.module';
 import { ScoringModule } from './scoring/scoring.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { ConfigAdminModule } from './config-admin/config.module';
+import { DocumentsModule } from './documents/documents.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
 
@@ -33,6 +35,8 @@ import { AppController } from './app.controller';
     ScoringModule,
     RatingsModule,
     ConfigAdminModule,
+    DocumentsModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
   providers: [

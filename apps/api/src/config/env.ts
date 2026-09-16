@@ -41,7 +41,9 @@ export const env = {
     evolution: {
       url: process.env.EVOLUTION_API_URL ?? 'http://159.65.224.135:8080',
       key: process.env.EVOLUTION_API_KEY ?? '',
-      instance: process.env.EVOLUTION_INSTANCE ?? 'sherpa',
+      instance: process.env.EVOLUTION_INSTANCE ?? 'pasarex',
+      // shared secret required (as ?token=) on the inbound webhook Evolution calls
+      webhookToken: process.env.EVOLUTION_WEBHOOK_TOKEN ?? 'dev-whatsapp-hook',
     },
   },
   storage: {

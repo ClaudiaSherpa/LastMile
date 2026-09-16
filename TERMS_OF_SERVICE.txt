@@ -1,0 +1,88 @@
+PASAREX LM — TERMS OF SERVICE
+Driver application (Barbados)
+Version: 2026-08-01
+
+These are the requirements and Terms of Service a driver must accept when applying
+on the PasarEx LM platform.
+
+================================================================================
+REQUIREMENTS
+================================================================================
+
+1. Be 18 or older
+   You must be at least 18 years old to drive with PasarEx.
+
+2. Valid driver's licence
+   A current Barbados driver's licence for your vehicle category.
+
+3. Eligible vehicle with current documents
+   Your own motorcycle, car, van or pickup, with valid compulsory insurance and
+   registration.
+
+4. Compatible smartphone
+   iPhone or Android with a data plan and GPS to receive and track deliveries.
+
+5. Government-issued ID
+   A valid Barbados national ID to verify your identity.
+
+6. Background check
+   You authorize and must pass a security & background check.
+
+7. Bank account in your name
+   To receive your earnings via direct deposit.
+
+================================================================================
+TERMS OF SERVICE
+================================================================================
+
+1. Acceptance & eligibility
+   By checking the acceptance box you represent that you meet all the requirements
+   listed above and agree to these Terms of Service as a condition to apply for and
+   operate on the PasarEx LM platform.
+
+2. Independent contractor
+   You operate as an independent contractor. These Terms create no employment,
+   agency or partnership relationship. You are responsible for your own taxes and
+   social-security obligations.
+
+3. Background & security verification
+   You authorize PasarEx LM and its partners to verify your identity, background and
+   documents. Passing the security stage is mandatory before you can receive
+   deliveries.
+
+4. Accuracy of information
+   You warrant that all information and documents you upload are true, your own and
+   current. False information or expired documents may suspend your eligibility.
+
+5. Vehicle, license & insurance
+   You must keep your driver's licence, compulsory insurance and vehicle
+   registration current, and operate a roadworthy vehicle properly insured under the
+   laws of Barbados.
+
+6. Conduct & service standards
+   You agree to provide safe, punctual and respectful service, to obey traffic laws,
+   and to protect each shipment and the consignee's data.
+
+7. Payments
+   Payments are settled for completed freight and deposited to the bank account in
+   your name. Rates and conditions may be updated and will be notified in the app.
+
+8. Ratings & deactivation
+   Your DriverScore is computed from ratings and performance and affects your
+   assignment priority. PasarEx LM may suspend or deactivate your account for breach
+   of these Terms.
+
+9. Data protection
+   You authorize the processing of your personal data under the Barbados Data
+   Protection Act, 2019 to operate the service, verify your eligibility and process
+   payments. You may access, update and delete your data.
+
+10. Modifications & governing law
+    PasarEx LM may modify these Terms; continued use constitutes acceptance. These
+    Terms are governed by the laws of Barbados.
+
+================================================================================
+By accepting, the applicant confirms they have read and agree to the Terms of
+Service and that they meet all the requirements above. Acceptance (timestamp +
+version) is recorded on the application at submission.
+================================================================================

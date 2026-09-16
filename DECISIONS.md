@@ -1,4 +1,4 @@
-# Decisions & Assumptions — Sherpa LM
+# Decisions & Assumptions — PasarEx LM
 
 Running log of notable choices made while building, per the brief's instruction to
 "surface assumptions here rather than pausing." Newest at the bottom of each phase.
@@ -29,7 +29,7 @@ Running log of notable choices made while building, per the brief's instruction 
 
 ## Phase 1
 - **Ports moved to avoid host clashes.** This dev machine already runs Postgres on
-  5432–5435, a Next.js app on 3000, and Vite on 5173. Sherpa LM therefore defaults to:
+  5432–5435, a Next.js app on 3000, and Vite on 5173. PasarEx LM therefore defaults to:
   API `3100`, Postgres `5436`, admin `5273`, driver `5274` (Redis `6379` was free). All are
   env-driven, so a clean machine can revert to conventional ports.
 - PostGIS geometries stored as `geometry(...,4326)` (WGS84 lon/lat). Bogotá seed polygons are
@@ -164,11 +164,83 @@ Running log of notable choices made while building, per the brief's instruction 
   reminders) plus pool/waves, OCR normalization and template interpolation — 37 unit tests, no DB or
   network needed, fast and deterministic.
 
+## Post-MVP hardening
+- **Driver authentication (done).** Drivers are `User`s (role `driver`) with passwords, so they log
+  in through the same `/auth/login`. The access token now embeds `driverId` (the `DriverProfile` id,
+  distinct from the user `sub`); `AuthService` loads the `driverProfile` relation at issue time and
+  `refresh`/re-login re-derive it, so it self-heals. The four driver-facing routes no longer trust a
+  client-supplied id: `tenders/:id/accept` + `/decline` and `tracking/ping` are `@Roles(DRIVER)` and
+  read the id from the JWT; `deliveries/:id/status` requires auth and enforces ownership (a driver may
+  only advance their own delivery, dispatcher/admin may advance any); `freight/priority-batch` (leaks
+  payouts) now requires a driver/ops role. The GPS simulator calls `TrackingService.ping()` in-process
+  so it is unaffected. Verified end-to-end (16 checks): body-`driverId`-without-token → 401, wrong role
+  → 403, authorized accept via JWT, ownership 403 across drivers, ops override.
+
+## Rebrand → PasarEx + Barbados localization + mobile browser
+- **Brand.** All user-facing "Sherpa" became **PasarEx** (frontends, page titles, PWA manifest,
+  API health/bootstrap strings, OCR request headers, notification title, seed console) and demo
+  logins moved to `@pasarex.com` / `pasarex123`. The internal `@sherpa/*` npm workspace scope and
+  infra identifiers (DB name `sherpa_lm`, container names, localStorage keys) were **left as-is** on
+  purpose — renaming them is pure churn/risk with no user benefit.
+- **Barbados.** `seed/bogota.ts` → `seed/barbados.ts`: the 10 Bogotá neighborhoods became the **11
+  Barbados parishes** with real centroids; the map bounding box (both frontends) is now Barbados
+  (`-59.66..-59.42`, `13.04..13.34`). Seed drivers/applicants/freight use Barbadian names, plate
+  formats (`P 1234`), parish coverage, `+1246` phones, and **BBD** payouts (`Bds$`). Document types
+  keep their keys (`soat`, `property`, `id` …) but display as Barbados equivalents (compulsory
+  vehicle insurance, vehicle registration, national ID). The driver Terms now cite the **Barbados
+  Data Protection Act, 2019** and Barbados governing law instead of Colombian Ley 1581.
+- **Language.** English is the default in both apps (`useState('en')` + i18n context default); the
+  ES/EN toggle and the Spanish strings stay in place (low-risk, reversible) since Barbados is English.
+- **Mobile browser (not an app).** Driver PWA: the fixed 390×844 phone mock (`Phone`) now uses
+  `.device-*` classes that fill the viewport under 480px (full-screen, no mock chrome, `100dvh`).
+  Ops console: the fixed sidebar becomes an off-canvas drawer with a hamburger + backdrop under
+  820px (`useIsMobile`), split panels `flex-wrap`, KPI/form grids use `auto-fit minmax`, and wide
+  tables scroll horizontally (`.card > table` block+overflow). No native app is required.
+
+## Document + ToS review for Ops
+- **Where.** The applicant review lives in the Ops **Approvals** detail panel — the one surface all
+  three reviewing roles (admin, dispatcher, security) already reach. Each submitted document now shows
+  status + expiry and a **View** button; a modal fetches the file and renders it inline (image or PDF).
+  The panel also shows the **Terms-of-Service acceptance** (version + timestamp, or "Not recorded").
+- **File serving.** New `GET /documents/:id/file` streams the stored file (`StorageService.read`, mime
+  by extension, `inline`), role-gated to admin/dispatcher/security. An `<img>`/`<iframe>` can't carry an
+  auth header, so the admin client fetches the file as a **blob with the Bearer token** and renders an
+  object URL — keeping the endpoint fully authenticated (verified: 401 no token, 403 driver, 404 unknown).
+- **ToS source.** Acceptance is read from `Application.draft.termsAcceptedAt` / `termsVersion` (recorded
+  at apply time, retained through submit) and added to the approval `detail` payload alongside document
+  `id` + `hasFile`.
+- **Scope note.** This targets applicants in the review queue (a prospective driver's submission). Active
+  drivers who've left the queue aren't yet reviewable here; the seed's demo applicants also carry no
+  uploaded files, so real review needs a submission made through the driver onboarding flow.
+
+## Post-approval driver review, phone-login, and WhatsApp
+- **Driver review on the Drivers panel (view-only, all three roles).** New `GET /drivers/:id/documents`
+  returns the driver's `Document` rows (id, status, expiry, `hasFile`) + the ToS acceptance (from the
+  driver's application draft) + phone/email. `GET /drivers` and `/drivers/:id/delivery-stats` were
+  opened to `security_officer` too, so admin/dispatcher/security can all open a driver and view
+  documents (reusing the `DocViewer` + the `/documents/:id/file` endpoint), ToS, and delivery stats.
+  This complements the Approvals panel, which only reaches applicants still in the review queue.
+- **Phone is the driver's username.** The onboarding wizard now requires the applicant to **create a
+  password at the documents step** (kept in local component state — never written to the plaintext
+  `draft` — and passed straight to submit, which argon2-hashes it). The account is created with
+  `phone` set, and `validateUser` already matches email **or** phone, so drivers sign in with their
+  phone number + password. The phone is also shown in the Drivers list + detail panel.
+- **WhatsApp send + receive (Evolution API).** New `WhatsAppModule` + `whatsapp_messages` table
+  (migration `1781130000000`). `POST /whatsapp/send` (admin/dispatcher) posts to Evolution
+  `/message/sendText/{instance}` (number normalized to digits) and logs the outbound row;
+  `POST /integrations/whatsapp/webhook?token=…` (`@Public`, shared-secret) ingests Evolution
+  `messages.upsert` events as inbound rows; both fan out to the Ops room over WS (`whatsapp.message`).
+  A new Ops **Messages** tab (admin/dispatcher) shows the live log + a composer. `POST
+  /whatsapp/webhook/register` is an admin helper that points the Evolution instance at our webhook.
+  **Graceful degradation:** with `EVOLUTION_API_KEY` empty, sends are logged as `skipped` (not sent) so
+  the platform still runs. **To go live:** set `EVOLUTION_API_KEY` + a connected `EVOLUTION_INSTANCE`,
+  set `NOTIFY_WHATSAPP_PROVIDER=whatsapp` (for templated notifications), and — since inbound needs
+  Evolution to reach this API — expose the API publicly (or tunnel) and call the register helper so
+  Evolution posts to `/api/integrations/whatsapp/webhook?token=<EVOLUTION_WEBHOOK_TOKEN>`.
+
 ## Known shortcuts (honest scope notes)
-- Driver tender-accept and GPS ping are `@Public` with `driverId` in the body — the MVP driver PWA is
-  link/device-based, so real driver JWT auth is a follow-up hardening step.
 - Tender wave advancement and the GPS feed are in-process (`setTimeout` / interval) — correct for a
   single API instance; a multi-instance deploy would move these to BullMQ/durable timers.
-- Bogotá operating-area polygons are approximate boxes and eligibility uses zone membership rather
+- Barbados parish polygons are approximate boxes and eligibility uses parish membership rather
   than live `ST_Contains` (points are stored, so it can be switched on).
 - OCR/WhatsApp/FCM are stubbed unless keyed; nothing external is required to run the whole platform.

@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
 import { Role } from '@sherpa/shared';
-import { CurrentUser, Public, Roles } from '../auth/decorators';
+import { CurrentUser, Roles } from '../auth/decorators';
 import { JwtPayload } from '@sherpa/shared';
 import { FreightService } from './freight.service';
 import { TenderService } from './tender.service';
-import { CreateFreightDto, RespondDto } from './dto';
+import { CreateFreightDto } from './dto';
 
 @Controller()
 export class FreightController {
@@ -19,9 +19,9 @@ export class FreightController {
     return this.freight.list();
   }
 
-  /** Premium freight Elite drivers get first access to. */
-  @Public()
+  /** Premium freight Elite drivers get first access to. Exposes payouts — drivers/ops only. */
   @Get('freight/priority-batch')
+  @Roles(Role.DRIVER, Role.DISPATCHER, Role.ADMIN)
   priorityBatch(@Query('tier') tier?: string) {
     return this.freight.priorityBatch(tier);
   }
@@ -46,18 +46,24 @@ export class FreightController {
   }
 
   /**
-   * Driver accept/decline. Public + driverId in body because the MVP driver PWA is
-   * link/device-based (no JWT yet); the engine validates pool membership + wave.
+   * Driver accept/decline. The driver identity comes from the authenticated JWT
+   * (never the request body); the engine still validates pool membership + wave.
    */
-  @Public()
   @Post('tenders/:id/accept')
-  accept(@Param('id') id: string, @Body() dto: RespondDto) {
-    return this.tender.accept(id, dto.driverId);
+  @Roles(Role.DRIVER)
+  accept(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.tender.accept(id, this.driverId(user));
   }
 
-  @Public()
   @Post('tenders/:id/decline')
-  decline(@Param('id') id: string, @Body() dto: RespondDto) {
-    return this.tender.decline(id, dto.driverId);
+  @Roles(Role.DRIVER)
+  decline(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.tender.decline(id, this.driverId(user));
+  }
+
+  /** A driver token must resolve to a DriverProfile (created at onboarding submit). */
+  private driverId(user: JwtPayload): string {
+    if (!user.driverId) throw new ForbiddenException('No driver profile for this account');
+    return user.driverId;
   }
 }

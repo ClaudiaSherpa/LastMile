@@ -13,6 +13,7 @@ export interface JwtPayload {
   sub: string; // user id
   role: Role;
   email?: string;
+  driverId?: string; // DriverProfile id, present for authenticated drivers
 }
 
 export interface AuthTokens {

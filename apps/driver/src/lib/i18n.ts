@@ -8,5 +8,5 @@ export interface I18n {
   t: (es: string, en: string) => string;
 }
 
-export const I18nCtx = createContext<I18n>({ lang: 'es', setLang: () => {}, t: (es) => es });
+export const I18nCtx = createContext<I18n>({ lang: 'en', setLang: () => {}, t: (_es, en) => en });
 export const useI18n = () => useContext(I18nCtx);
