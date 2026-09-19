@@ -238,6 +238,29 @@ Running log of notable choices made while building, per the brief's instruction 
   Evolution to reach this API — expose the API publicly (or tunnel) and call the register helper so
   Evolution posts to `/api/integrations/whatsapp/webhook?token=<EVOLUTION_WEBHOOK_TOKEN>`.
 
+## Freight rebuilt as a delivery-plan engine (bulk hub distribution)
+- **Model.** The single-shipment freight/tender flow didn't fit real operations, so freight is
+  now driven by an uploaded **delivery plan**: `DeliveryPlan` → per-parish `DeliveryPlanLine`
+  (requiredPackages, preassignedDriverIds) → per-driver `PlanTender` (sized to the driver's
+  vehicle). All pickup at a single hub ("PasarEx Hub").
+- **Broadcast algorithm.** Order parishes **scarcest-first** (fewest eligible drivers → most, so the
+  hardest-to-fill get first crack at the pool). Per parish: pre-assigned drivers get an
+  auto-accepted tender (their vehicle capacity); the remaining demand is tendered to every eligible
+  driver (security-cleared + eligible + covers the parish), each offered their vehicle's package
+  capacity. Acceptance is accumulated under a row lock; once accepted ≥ required the line is FILLED
+  and remaining OFFERED tenders are CANCELLED (drivers notified over WS). Plan completes when all
+  lines fill.
+- **Configurable freight profile.** Packages-per-vehicle is stored per plan (default van 120 / car 80
+  / moto 50 / pickup 150 / bike 20), editable at plan creation.
+- **Eligibility ≠ vehicle filter.** Unlike the old pool, vehicle type does NOT gate eligibility for a
+  parish (any cleared driver covering it is eligible); it only sizes the tender quantity.
+- **Intake.** Ops builds a plan by parish rows or uploads CSV/Excel (parsed client-side with SheetJS:
+  columns parish/packages/preassigned); parish cells match by slug or localized name.
+- **Kept alongside.** The legacy single-freight controller/tender engine and "Fletes" tab remain for
+  now (they still power the consignee tracking/rating demo). Verified 14/14 end-to-end.
+- **Not yet done:** a driver-facing UI to view/accept plan tenders (API + WS exist), and creating a
+  `Delivery` (fulfillment/tracking) record when a driver accepts a plan tender.
+
 ## Known shortcuts (honest scope notes)
 - Tender wave advancement and the GPS feed are in-process (`setTimeout` / interval) — correct for a
   single API instance; a multi-instance deploy would move these to BullMQ/durable timers.
