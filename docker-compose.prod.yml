@@ -37,6 +37,7 @@ services:
     env_file: .env.prod
     environment:
       NODE_ENV: production
+      API_PORT: "3100" # must match the nginx upstream (api:3100)
       DB_HOST: db
       DB_PORT: "5432"
       DB_SSL: "false"
