@@ -25,6 +25,8 @@ import {
   User,
 } from '../database/entities';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { env } from '../config/env';
 
 export interface PlanLineInput {
   parish: string;
@@ -50,7 +52,31 @@ export class DeliveryPlanService {
     @InjectRepository(DriverProfile) private drivers: Repository<DriverProfile>,
     @InjectRepository(User) private users: Repository<User>,
     private realtime: RealtimeGateway,
+    private whatsapp: WhatsAppService,
   ) {}
+
+  private prettyParish(slug: string): string {
+    return slug.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /** WhatsApp a driver that a tender is available, with a link to open the app. */
+  private notifyOffer(phone: string | undefined, parish: string, packages: number, hub: string, date?: string, preassigned = false) {
+    if (!phone) return;
+    const when = date ? ` (${date})` : '';
+    const link = env.api.publicBaseUrl;
+    const text = preassigned
+      ? `PasarEx: You've been pre-assigned ${packages} packages for ${this.prettyParish(parish)}${when}, pickup at ${hub}. Open the app: ${link}`
+      : `PasarEx: New delivery offer${when} — ${packages} packages for ${this.prettyParish(parish)}, pickup at ${hub}. Open the app to accept: ${link}`;
+    void this.whatsapp.send(phone, text).catch(() => {});
+  }
+
+  /** WhatsApp a driver that a parish tender is now fully covered. */
+  private notifyFilled(phone: string | undefined, parish: string, date?: string) {
+    if (!phone) return;
+    const when = date ? ` (${date})` : '';
+    const text = `PasarEx: The ${this.prettyParish(parish)} delivery${when} is now fully covered and no longer available.`;
+    void this.whatsapp.send(phone, text).catch(() => {});
+  }
 
   private capacityOf(plan: DeliveryPlan, type?: VehicleType): number {
     if (!type) return 0;
@@ -107,9 +133,9 @@ export class DeliveryPlanService {
 
   /** Candidate drivers with the fields eligibility + capacity need. */
   private async candidates(): Promise<
-    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType; weekdays: number[] }>
+    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType; weekdays: number[]; phone?: string }>
   > {
-    const list = await this.drivers.find({ relations: { vehicles: true, operatingAreas: true, availability: true } });
+    const list = await this.drivers.find({ relations: { vehicles: true, operatingAreas: true, availability: true, user: true } });
     return list.map((d) => ({
       id: d.id,
       securityCleared: d.securityCleared,
@@ -117,6 +143,7 @@ export class DeliveryPlanService {
       zones: d.operatingAreas?.map((a) => a.slug) ?? [],
       vehicle: d.vehicles?.[0]?.type as VehicleType | undefined,
       weekdays: Array.from(new Set((d.availability ?? []).map((s) => s.weekday))),
+      phone: d.user?.phone,
     }));
   }
 
@@ -165,6 +192,7 @@ export class DeliveryPlanService {
         );
         accepted += cap;
         this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true });
+        this.notifyOffer(c?.phone, line.parish, cap, plan.hubName, plan.operationalDate, true);
       }
 
       // 2) tender the remainder to eligible (non-preassigned) drivers
@@ -178,6 +206,7 @@ export class DeliveryPlanService {
             this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, status: PlanTenderStatus.OFFERED }),
           );
           this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName });
+          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate);
         }
         line.status = eligible.length ? PlanLineStatus.BROADCASTING : (accepted >= line.requiredPackages ? PlanLineStatus.FILLED : PlanLineStatus.BROADCASTING);
       } else {
@@ -197,7 +226,7 @@ export class DeliveryPlanService {
 
   /** A driver accepts a tender for their parish (adds their package chunk). */
   async accept(tenderId: string, driverId: string): Promise<any> {
-    return this.tenders.manager.transaction(async (em) => {
+    const result = await this.tenders.manager.transaction(async (em) => {
       const tender = await em.findOne(PlanTender, { where: { id: tenderId }, relations: { line: { plan: true }, driver: true } });
       if (!tender) throw new NotFoundException('Tender not found');
       if (tender.driver?.id !== driverId) throw new BadRequestException('Not your tender');
@@ -233,16 +262,18 @@ export class DeliveryPlanService {
       );
 
       let filled = false;
+      const cancelledPhones: string[] = [];
       if (line.acceptedPackages >= line.requiredPackages) {
         line.status = PlanLineStatus.FILLED;
         filled = true;
         // cancel the remaining open offers on this line
-        const others = await em.find(PlanTender, { where: { line: { id: line.id }, status: PlanTenderStatus.OFFERED }, relations: { driver: true } });
+        const others = await em.find(PlanTender, { where: { line: { id: line.id }, status: PlanTenderStatus.OFFERED }, relations: { driver: { user: true } } });
         for (const o of others) {
           o.status = PlanTenderStatus.CANCELLED;
           o.respondedAt = new Date();
           await em.save(o);
           this.realtime.emitDriver(o.driver.id, 'plan.tender.cancelled', { lineId: line.id, parish: line.parish, reason: 'filled' });
+          if (o.driver.user?.phone) cancelledPhones.push(o.driver.user.phone);
         }
       }
       await em.save(line);
@@ -255,8 +286,15 @@ export class DeliveryPlanService {
       }
 
       this.realtime.emitOps('plan.tender.accepted', { planId: plan.id, lineId: line.id, parish: line.parish, driverId, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled });
-      return { ok: true, parish: line.parish, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled, deliveryId: delivery.id, trackingToken: delivery.trackingToken };
+      return { ok: true, parish: line.parish, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled, deliveryId: delivery.id, trackingToken: delivery.trackingToken, _cancelledPhones: cancelledPhones, _date: plan.operationalDate };
     });
+
+    // notify the drivers whose offers were cancelled (parish filled) — outside the tx
+    if (result.filled) {
+      for (const phone of result._cancelledPhones) this.notifyFilled(phone, result.parish, result._date);
+    }
+    const { _cancelledPhones, _date, ...pub } = result;
+    return pub;
   }
 
   async decline(tenderId: string, driverId: string): Promise<any> {
