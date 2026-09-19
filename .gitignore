@@ -5,6 +5,7 @@ coverage/
 *.log
 .env
 .env.local
+.env.prod
 .DS_Store
 uploads/
 # runtime upload dirs only — NOT the src/storage module

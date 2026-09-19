@@ -13,6 +13,7 @@
     "migration:run:prod": "typeorm migration:run -d dist/database/data-source.js",
     "migration:revert": "npm run typeorm -- migration:revert -d ./src/database/data-source.ts",
     "seed": "ts-node -r tsconfig-paths/register ./src/database/seed/seed.ts",
+    "seed:prod": "node dist/database/seed/seed.js",
     "test": "jest"
   },
   "dependencies": {
