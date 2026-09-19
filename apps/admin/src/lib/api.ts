@@ -99,11 +99,7 @@ export const api = {
   runScan: () => request<any>('/compliance/scan', { method: 'POST' }),
   renewDoc: (id: string, expiryDate: string) =>
     request<any>(`/compliance/documents/${id}/renew`, { method: 'POST', body: JSON.stringify({ expiryDate }) }),
-  // freight / tenders
   zones: () => request<any[]>('/operating-areas'),
-  freight: () => request<any[]>('/freight'),
-  createFreight: (body: any) => request<any>('/freight', { method: 'POST', body: JSON.stringify(body) }),
-  broadcast: (id: string) => request<any>(`/freight/${id}/broadcast`, { method: 'POST' }),
   live: () => request<any[]>('/tracking/live'),
   // ── admin config console ──
   cfgDocTypes: () => request<any[]>('/config/document-types'),

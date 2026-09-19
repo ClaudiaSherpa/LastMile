@@ -5,8 +5,6 @@ import { I18nCtx, Lang, useI18n } from './lib/i18n';
 import { useEvent, useRoom } from './lib/socket';
 import { Config } from './Config';
 
-const VEHICLE_TYPES = ['moto', 'carro', 'van', 'camioneta', 'bici'];
-
 // ── shared bits ─────────────────────────────────────────────────
 function LangToggle() {
   const { lang, setLang } = useI18n();
@@ -83,7 +81,6 @@ const TABS = [
   ['map', 'Mapa en vivo', 'Live map'],
   ['approvals', 'Aprobaciones', 'Approvals'],
   ['compliance', 'Cumplimiento', 'Compliance'],
-  ['freight', 'Fletes', 'Freight'],
   ['plans', 'Planes', 'Delivery plans'],
   ['drivers', 'Conductores', 'Drivers'],
   ['messages', 'Mensajes', 'Messages'],
@@ -437,7 +434,6 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'map' && <LiveMap />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'compliance' && <Compliance />}
-          {tab === 'freight' && <FreightScreen />}
           {tab === 'plans' && <DeliveryPlans />}
           {tab === 'drivers' && <Drivers />}
           {tab === 'messages' && <Messages />}
@@ -877,123 +873,6 @@ function LiveMap() {
             sub={[drivers[selected].vehicle, drivers[selected].tier].filter(Boolean).join(' · ')}
             onClose={() => setSelected(null)} />
         )}
-      </div>
-    </div>
-  );
-}
-
-function FreightScreen() {
-  const { t } = useI18n();
-  const [rows, setRows] = useState<any[]>([]);
-  const [zones, setZones] = useState<any[]>([]);
-  const [feed, setFeed] = useState<any[]>([]);
-  const [busy, setBusy] = useState('');
-  const [form, setForm] = useState<any>({ client: '', pickupZone: 'st_michael', dropZone: 'st_george', requiredVehicle: 'moto', weightKg: 6, payout: 20, priority: false });
-  const { connected } = useRoom('ops');
-
-  const load = () => api.freight().then(setRows).catch(() => {});
-  useEffect(() => { load(); api.zones().then(setZones).catch(() => {}); }, []);
-
-  const pushFeed = useCallback((kind: string, payload: any) => {
-    setFeed((f) => [{ kind, payload, ts: new Date().toLocaleTimeString() }, ...f].slice(0, 20));
-  }, []);
-  useEvent('tender.offer', useCallback((p: any) => pushFeed('offer', p), [pushFeed]));
-  useEvent('tender.resolved', useCallback((p: any) => { pushFeed('resolved', p); load(); }, [pushFeed]));
-
-  const create = async () => {
-    setBusy('create');
-    try { await api.createFreight({ ...form, weightKg: Number(form.weightKg), payout: Number(form.payout) }); await load(); }
-    finally { setBusy(''); }
-  };
-  const broadcast = async (id: string) => {
-    setBusy(id);
-    try { const r = await api.broadcast(id); pushFeed('broadcast', r); await load(); }
-    finally { setBusy(''); }
-  };
-
-  const statusBadgeF: Record<string, string> = { available: 'badge-gray', broadcasting: 'badge-amber', assigned: 'badge-brand', completed: 'badge-blue', cancelled: 'badge-red' };
-
-  return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      <div style={{ flex: 1, display: 'grid', gap: 16, minWidth: 0 }}>
-        {/* create form */}
-        <div className="card" style={{ padding: 18 }}>
-          <div className="eyebrow" style={{ marginBottom: 12 }}>{t('Nuevo flete', 'New freight')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-            <input className="input" placeholder={t('Cliente', 'Client')} value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} />
-            <select className="select" value={form.pickupZone} onChange={(e) => setForm({ ...form, pickupZone: e.target.value })}>{zones.map((z) => <option key={z.slug} value={z.slug}>{t('Recoge', 'Pick')}: {z.nameEs}</option>)}</select>
-            <select className="select" value={form.dropZone} onChange={(e) => setForm({ ...form, dropZone: e.target.value })}>{zones.map((z) => <option key={z.slug} value={z.slug}>{t('Entrega', 'Drop')}: {z.nameEs}</option>)}</select>
-            <select className="select" value={form.requiredVehicle} onChange={(e) => setForm({ ...form, requiredVehicle: e.target.value })}>{VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}</select>
-            <input className="input mono" type="number" placeholder="kg" value={form.weightKg} onChange={(e) => setForm({ ...form, weightKg: e.target.value })} />
-            <input className="input mono" type="number" placeholder="$ payout" value={form.payout} onChange={(e) => setForm({ ...form, payout: e.target.value })} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5 }}>
-              <input type="checkbox" checked={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.checked })} />
-              {t('Prioritario (élite primero)', 'Priority (elite first)')}
-            </label>
-            <button className="btn btn-dark" disabled={!form.client || busy === 'create'} onClick={create}>{t('Crear flete', 'Create freight')}</button>
-          </div>
-        </div>
-
-        {/* freight list */}
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead><tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
-              <th style={{ padding: '10px 16px' }}>{t('Flete', 'Freight')}</th>
-              <th style={{ padding: '10px 16px' }}>{t('Ruta', 'Route')}</th>
-              <th style={{ padding: '10px 16px' }}>{t('Veh.', 'Veh.')}</th>
-              <th style={{ padding: '10px 16px' }}>{t('Pago', 'Payout')}</th>
-              <th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th>
-              <th></th>
-            </tr></thead>
-            <tbody>
-              {rows.map((f) => (
-                <tr key={f.id} style={{ borderTop: '1px solid var(--line)' }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 600 }}>{f.reference}{f.priority && <span className="badge badge-amber" style={{ marginLeft: 6 }}>★</span>}
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', fontWeight: 400 }}>{f.client}</div>
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: 13 }}>{f.pickupZone} → {f.dropZone}</td>
-                  <td style={{ padding: '12px 16px' }}>{f.requiredVehicle}</td>
-                  <td style={{ padding: '12px 16px' }} className="mono">Bds${(f.payout || 0).toLocaleString('en-US')}</td>
-                  <td style={{ padding: '12px 16px' }}><span className={`badge ${statusBadgeF[f.status] || 'badge-gray'}`}>{f.status}{f.assignedTo ? ` · ${f.assignedTo}` : ''}</span></td>
-                  <td style={{ padding: '12px 16px' }}>
-                    {(f.status === 'available' || f.status === 'broadcasting') && (
-                      <button className="btn btn-primary" style={{ padding: '6px 12px' }} disabled={busy === f.id} onClick={() => broadcast(f.id)}>{t('Difundir', 'Broadcast')}</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* live feed */}
-      <div className="card" style={{ width: 320, maxWidth: '100%', flexShrink: 0, padding: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <span className="eyebrow">{t('En vivo', 'Live')}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-            <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
-            <span className="mono" style={{ color: 'var(--ink-500)' }}>{connected ? 'WS' : '—'}</span>
-          </span>
-        </div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {feed.map((e, i) => (
-            <div key={i} className="fade-up" style={{ fontSize: 12.5, padding: 10, borderRadius: 9, background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className={`badge ${e.kind === 'resolved' ? 'badge-brand' : e.kind === 'offer' ? 'badge-blue' : 'badge-amber'}`}>{e.kind}</span>
-                <span className="mono" style={{ color: 'var(--ink-400)' }}>{e.ts}</span>
-              </div>
-              <div style={{ marginTop: 6, color: 'var(--ink-600)' }}>
-                {e.kind === 'offer' && `${e.payload.freight?.reference} · wave ${e.payload.wave} → ${e.payload.offeredCount ?? '?'} ${t('conductores', 'drivers')}`}
-                {e.kind === 'resolved' && `${e.payload.outcome}${e.payload.driverId ? ' · ' + e.payload.driverId.slice(0, 8) : ''}`}
-                {e.kind === 'broadcast' && `${e.payload.reference} · ${t('pool', 'pool')} ${e.payload.poolSize}`}
-              </div>
-            </div>
-          ))}
-          {!feed.length && <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Difunde un flete para ver eventos', 'Broadcast a freight to see events')}</div>}
-        </div>
       </div>
     </div>
   );

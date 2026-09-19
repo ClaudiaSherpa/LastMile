@@ -12,7 +12,6 @@ import {
   VehicleType,
   ApplicationStatus,
   DocumentStatus,
-  FreightStatus,
 } from '@sherpa/shared';
 import { AppDataSource } from '../data-source';
 import {
@@ -23,14 +22,13 @@ import {
   Document,
   DocumentType,
   DriverProfile,
-  Freight,
   NotificationTemplate,
   OperatingArea,
   ScoringConfig,
   User,
   Vehicle,
 } from '../entities';
-import { ZONES, boxPolygon, point, zoneBySlug } from './barbados';
+import { ZONES, boxPolygon, zoneBySlug } from './barbados';
 
 const TIERS = [
   { tier: DriverTier.ELITE, min: 92 },
@@ -224,39 +222,6 @@ async function run() {
     );
   }
   console.log(`  ✓ ${pending.length} pending applications in the security queue`);
-
-  // ── Sample freight ───────────────────────────────────────────
-  const freightRepo = ds.getRepository(Freight);
-  let seq = 4820;
-  const freights = [
-    { client: 'Fresh Market', pickup: 'st_michael', drop: 'st_george', vehicle: VehicleType.MOTO, weight: 6, payout: 18, distance: 4.2, window: 30, priority: true },
-    { client: 'Massy Stores', pickup: 'christ_church', drop: 'st_michael', vehicle: VehicleType.CARRO, weight: 32, payout: 32, distance: 9.1, window: 60, priority: false },
-    { client: 'Cost-U-Less', pickup: 'st_philip', drop: 'st_john', vehicle: VehicleType.VAN, weight: 210, payout: 85, distance: 12.7, window: 120, priority: false },
-  ];
-  for (const f of freights) {
-    const p = zoneBySlug(f.pickup)!;
-    const dz = zoneBySlug(f.drop)!;
-    await freightRepo.save(
-      freightRepo.create({
-        reference: 'F-' + seq++,
-        client: f.client,
-        consigneeName: 'Customer ' + f.client,
-        consigneePhone: '+1246' + Math.floor(Math.random() * 9000000 + 1000000),
-        pickupZone: f.pickup,
-        dropZone: f.drop,
-        pickupPoint: point(p.lng, p.lat),
-        dropPoint: point(dz.lng, dz.lat),
-        requiredVehicle: f.vehicle,
-        weightKg: f.weight,
-        windowMinutes: f.window,
-        distanceKm: f.distance,
-        payout: f.payout,
-        priority: f.priority,
-        status: FreightStatus.AVAILABLE,
-      }),
-    );
-  }
-  console.log(`  ✓ ${freights.length} sample freights`);
 
   await ds.destroy();
   console.log('✅ seed complete — login with admin@pasarex.com / pasarex123');
