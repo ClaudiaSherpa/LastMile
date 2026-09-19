@@ -6,7 +6,7 @@
 # plus a managed PostgreSQL (enable the PostGIS extension — see DEPLOY.md) and a
 # PRE_DEPLOY job that runs TypeORM migrations before each release.
 #
-# Replace REPLACE_WITH_GH_OWNER/pasarex-lm with your GitHub repo, then:
+# GitHub repo: ClaudiaSherpa/LastMile (branch master). To create the app:
 #   doctl apps create --spec .do/app.yaml
 # (or App Platform console -> Create App -> import this spec). Set SECRET values
 # (JWT secrets, webhook token, optional API keys) in the DO dashboard afterwards.
@@ -25,7 +25,7 @@ services:
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
-      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      repo: ClaudiaSherpa/LastMile
       branch: master
       deploy_on_push: true
     http_port: 3100
@@ -88,7 +88,7 @@ jobs:
     dockerfile_path: apps/api/Dockerfile
     source_dir: /
     github:
-      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      repo: ClaudiaSherpa/LastMile
       branch: master
     run_command: cd /repo && npm run migration:run:prod -w @sherpa/api
     instance_size_slug: basic-xxs
@@ -112,7 +112,7 @@ static_sites:
   - name: driver
     source_dir: /
     github:
-      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      repo: ClaudiaSherpa/LastMile
       branch: master
     build_command: npm ci && npm run build -w @sherpa/shared && npm run build -w @sherpa/driver
     output_dir: apps/driver/dist
@@ -123,7 +123,7 @@ static_sites:
   - name: ops
     source_dir: /
     github:
-      repo: REPLACE_WITH_GH_OWNER/pasarex-lm
+      repo: ClaudiaSherpa/LastMile
       branch: master
     # base must match the route so the SPA's asset URLs resolve under /ops/
     build_command: npm ci && npm run build -w @sherpa/shared && npm run build -w @sherpa/admin -- --base=/ops/
