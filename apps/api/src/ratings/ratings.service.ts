@@ -27,6 +27,8 @@ export class RatingsService {
       relations: { driver: { user: true }, freight: true },
     });
     if (!delivery) return;
+    // batch (delivery-plan) runs have no single consignee — no rating link to send
+    if (!delivery.freight?.consigneePhone) return;
     const link = `${env.api.publicBaseUrl}/?rate=${delivery.trackingToken}`;
     const driverName = delivery.driver?.user?.fullName?.split(' ')[0] ?? 'tu conductor';
     await this.notify.send({

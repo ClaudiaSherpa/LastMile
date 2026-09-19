@@ -106,8 +106,10 @@ export class TrackingService {
     delivery.timeline = { ...(delivery.timeline ?? {}), [status]: new Date().toISOString() };
     if (status === DeliveryStatus.DELIVERED || status === DeliveryStatus.FAILED) {
       delivery.completedAt = new Date();
-      delivery.freight.status = status === DeliveryStatus.DELIVERED ? FreightStatus.COMPLETED : FreightStatus.CANCELLED;
-      await this.freights.save(delivery.freight);
+      if (delivery.freight) {
+        delivery.freight.status = status === DeliveryStatus.DELIVERED ? FreightStatus.COMPLETED : FreightStatus.CANCELLED;
+        await this.freights.save(delivery.freight);
+      }
       if (delivery.driver) {
         delivery.driver.status = DriverStatus.IDLE;
         await this.drivers.save(delivery.driver);
@@ -140,6 +142,27 @@ export class TrackingService {
     return payload;
   }
 
+  /** A driver's own deliveries (batch runs + freight), newest first. */
+  async driverDeliveries(driverId: string) {
+    const rows = await this.deliveries.find({
+      where: { driver: { id: driverId } },
+      relations: { freight: true },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+    return rows.map((d) => ({
+      id: d.id,
+      status: d.status,
+      parish: d.parish,
+      packages: d.packages,
+      trackingToken: d.trackingToken,
+      reference: d.freight?.reference ?? (d.parish ? `Batch · ${d.parish}` : 'Delivery'),
+      pickup: d.freight?.pickupZone ?? 'PasarEx Hub',
+      drop: d.freight?.dropZone ?? d.parish,
+      createdAt: d.createdAt,
+    }));
+  }
+
   /** Public consignee view, gated by the opaque tracking token. */
   async byToken(token: string) {
     const delivery = await this.deliveries.findOne({
@@ -152,11 +175,13 @@ export class TrackingService {
       status: delivery.status,
       timeline: delivery.timeline,
       etaMinutes: delivery.etaMinutes,
-      freight: {
-        reference: delivery.freight.reference,
-        pickupZone: delivery.freight.pickupZone,
-        dropZone: delivery.freight.dropZone,
-      },
+      freight: delivery.freight
+        ? {
+            reference: delivery.freight.reference,
+            pickupZone: delivery.freight.pickupZone,
+            dropZone: delivery.freight.dropZone,
+          }
+        : { reference: delivery.parish ? `Batch · ${delivery.parish}` : 'Delivery', pickupZone: 'PasarEx Hub', dropZone: delivery.parish ?? '' },
       // never expose driver PII beyond first name + vehicle/plate
       driver: delivery.driver
         ? {

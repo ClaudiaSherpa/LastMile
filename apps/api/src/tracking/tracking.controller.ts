@@ -36,6 +36,14 @@ export class TrackingController {
     return this.tracking.live();
   }
 
+  /** The authenticated driver's own deliveries (for the driver app). */
+  @Get('driver/deliveries')
+  @Roles(Role.DRIVER)
+  driverDeliveries(@CurrentUser() user: JwtPayload) {
+    if (!user.driverId) throw new ForbiddenException('No driver profile for this account');
+    return this.tracking.driverDeliveries(user.driverId);
+  }
+
   /**
    * Advance a delivery's lifecycle. A driver may only advance their own delivery;
    * dispatchers/admins may advance any (e.g. to mark a failure).

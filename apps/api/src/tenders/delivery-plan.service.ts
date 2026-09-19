@@ -7,14 +7,17 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as crypto from 'crypto';
 import {
   DeliveryPlanStatus,
+  DeliveryStatus,
   DEFAULT_PACKAGE_CAPACITY,
   PlanLineStatus,
   PlanTenderStatus,
   VehicleType,
 } from '@sherpa/shared';
 import {
+  Delivery,
   DeliveryPlan,
   DeliveryPlanLine,
   DriverProfile,
@@ -204,6 +207,20 @@ export class DeliveryPlanService {
       await em.save(tender);
       line.acceptedPackages += tender.packages;
 
+      // create the driver's batch delivery (hub -> parish) so it flows into
+      // the existing fulfillment/tracking pipeline (status lifecycle + GPS + score)
+      const delivery = await em.save(
+        em.create(Delivery, {
+          driver: { id: driverId } as DriverProfile,
+          parish: line.parish,
+          packages: tender.packages,
+          planTenderId: tender.id,
+          status: DeliveryStatus.ASSIGNED,
+          timeline: { assigned: new Date().toISOString() },
+          trackingToken: crypto.randomBytes(12).toString('hex'),
+        }),
+      );
+
       let filled = false;
       if (line.acceptedPackages >= line.requiredPackages) {
         line.status = PlanLineStatus.FILLED;
@@ -227,7 +244,7 @@ export class DeliveryPlanService {
       }
 
       this.realtime.emitOps('plan.tender.accepted', { planId: plan.id, lineId: line.id, parish: line.parish, driverId, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled });
-      return { ok: true, parish: line.parish, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled };
+      return { ok: true, parish: line.parish, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled, deliveryId: delivery.id, trackingToken: delivery.trackingToken };
     });
   }
 

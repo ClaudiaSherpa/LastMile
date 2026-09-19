@@ -134,11 +134,21 @@ export class Delivery {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Freight)
-  freight: Freight;
+  @ManyToOne(() => Freight, { nullable: true })
+  freight?: Freight;
 
   @ManyToOne(() => DriverProfile)
   driver: DriverProfile;
+
+  // batch context for delivery-plan (hub distribution) deliveries — no single freight
+  @Column({ nullable: true })
+  parish?: string;
+
+  @Column({ type: 'int', nullable: true })
+  packages?: number;
+
+  @Column({ type: 'uuid', nullable: true })
+  planTenderId?: string;
 
   @Column({ type: 'enum', enum: DeliveryStatus, default: DeliveryStatus.ASSIGNED })
   status: DeliveryStatus;

@@ -31,6 +31,33 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
+// ── driver authenticated session (phone + password login) ──────
+const AUTH_KEY = 'pasarex_driver_auth';
+export interface DriverAuth { accessToken: string; driverId?: string; name?: string; phone?: string }
+export const driverAuth = {
+  get(): DriverAuth | null {
+    try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch { return null; }
+  },
+  set(a: DriverAuth) { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); },
+  clear() { localStorage.removeItem(AUTH_KEY); },
+};
+
+function decodeDriverId(token: string): string | undefined {
+  try { return JSON.parse(atob(token.split('.')[1])).driverId; } catch { return undefined; }
+}
+
+// authed fetch using the stored driver JWT
+async function aj<T>(path: string, init?: RequestInit): Promise<T> {
+  const a = driverAuth.get();
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(a ? { Authorization: `Bearer ${a.accessToken}` } : {}), ...(init?.headers || {}) },
+  });
+  if (res.status === 401) { driverAuth.clear(); throw new Error('Session expired'); }
+  if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || `HTTP ${res.status}`); }
+  return res.status === 204 ? (undefined as T) : res.json();
+}
+
 export interface DocType {
   key: string; nameEs: string; nameEn: string; required: boolean; tracksExpiry: boolean; sortOrder: number;
 }
@@ -61,4 +88,17 @@ export const api = {
     }
     return res.json();
   },
+
+  // ── driver operational (authenticated) ──
+  login: async (username: string, password: string): Promise<DriverAuth> => {
+    const r = await j<any>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+    const a: DriverAuth = { accessToken: r.accessToken, driverId: decodeDriverId(r.accessToken), name: r.user?.fullName, phone: r.user?.phone };
+    driverAuth.set(a);
+    return a;
+  },
+  myTenders: () => aj<any[]>('/driver/plan-tenders'),
+  acceptTender: (id: string) => aj<any>(`/plan-tenders/${id}/accept`, { method: 'POST' }),
+  declineTender: (id: string) => aj<any>(`/plan-tenders/${id}/decline`, { method: 'POST' }),
+  myDeliveries: () => aj<any[]>('/driver/deliveries'),
+  advanceDelivery: (id: string, status: string) => aj<any>(`/deliveries/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 };

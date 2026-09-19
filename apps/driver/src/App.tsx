@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, DocType, session, Zone } from './lib/api';
+import { io, Socket } from 'socket.io-client';
+import { api, DocType, driverAuth, session, Zone } from './lib/api';
 import { I18nCtx, Lang, useI18n } from './lib/i18n';
 import { Tracking } from './Tracking';
 import { Rate } from './Rate';
@@ -64,7 +65,7 @@ function Toast({ msg }: { msg: string | null }) {
 }
 
 // ── welcome ─────────────────────────────────────────────────────
-function Welcome({ onStart }: { onStart: () => void }) {
+function Welcome({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void }) {
   const { t } = useI18n();
   return (
     <Phone>
@@ -86,6 +87,7 @@ function Welcome({ onStart }: { onStart: () => void }) {
         </p>
         <div style={{ marginTop: 'auto' }}>
           <button className="btn btn-primary btn-lg btn-block" onClick={onStart}>{t('Comenzar solicitud', 'Start application')}</button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={onSignIn}>{t('Ya soy conductor · Ingresar', 'Already a driver · Sign in')}</button>
         </div>
       </div>
     </Phone>
@@ -521,8 +523,136 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
   );
 }
 
+// ── driver sign-in + home (view/accept tenders, run deliveries) ─
+const DFLOW = ['assigned', 'en_route_pickup', 'picked_up', 'en_route', 'delivered'];
+const DLABEL: Record<string, [string, string]> = {
+  assigned: ['Asignado', 'Assigned'],
+  en_route_pickup: ['Yendo al hub', 'Heading to hub'],
+  picked_up: ['Recogido', 'Picked up'],
+  en_route: ['En ruta', 'On route'],
+  delivered: ['Entregado', 'Delivered'],
+  failed: ['Fallido', 'Failed'],
+};
+const nextStatus = (s: string) => { const i = DFLOW.indexOf(s); return i >= 0 && i < DFLOW.length - 1 ? DFLOW[i + 1] : null; };
+
+function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const { t } = useI18n();
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true); setErr('');
+    try { await api.login(phone.trim(), password); onDone(); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 20px 12px' }}>
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-700)' }}>‹</button>
+          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
+          <LangToggle />
+        </div>
+      </div>
+      <form onSubmit={submit} style={{ padding: '8px 22px 22px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <h1 className="display" style={{ fontSize: 26, margin: '8px 0 4px' }}>{t('Iniciar sesión', 'Sign in')}</h1>
+        <p style={{ color: 'var(--ink-500)', fontSize: 13.5, margin: '0 0 18px', lineHeight: 1.5 }}>{t('Usa tu número de celular y tu contraseña.', 'Use your mobile number and password.')}</p>
+        <Field label={t('Celular', 'Mobile')}><input className="input mono" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 246 XXX XXXX" /></Field>
+        <Field label={t('Contraseña', 'Password')}><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+        {err && <div className="badge badge-red" style={{ marginBottom: 12 }}>{err}</div>}
+        <button className="btn btn-primary btn-lg btn-block" style={{ marginTop: 'auto' }} disabled={busy || !phone || !password}>{busy ? '…' : t('Ingresar', 'Sign in')}</button>
+      </form>
+    </Phone>
+  );
+}
+
+function DriverHome({ onLogout }: { onLogout: () => void }) {
+  const { t, lang } = useI18n();
+  const [offers, setOffers] = useState<any[]>([]);
+  const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [zones, setZones] = useState<Record<string, any>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const [busy, setBusy] = useState('');
+  const sock = useRef<Socket | null>(null);
+  const auth = driverAuth.get();
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
+  const parishName = (slug?: string) => (slug && zones[slug]) ? (lang === 'es' ? zones[slug].nameEs : zones[slug].nameEn) : (slug || '');
+
+  const load = async () => {
+    try { setOffers(await api.myTenders()); } catch { /* ignore */ }
+    try { setDeliveries(await api.myDeliveries()); } catch { /* ignore */ }
+  };
+  useEffect(() => {
+    api.operatingAreas().then((zs) => setZones(Object.fromEntries(zs.map((z) => [z.slug, z])))).catch(() => {});
+    load();
+    const s = io({ path: '/socket.io', transports: ['websocket', 'polling'] });
+    sock.current = s;
+    s.on('connect', () => { if (auth?.driverId) s.emit('join', { room: `driver:${auth.driverId}` }); });
+    s.on('plan.tender', () => load());
+    s.on('plan.tender.cancelled', () => load());
+    s.on('delivery.updated', () => load());
+    return () => { s.disconnect(); };
+  }, []);
+
+  const accept = async (o: any) => { setBusy(o.id); try { const r = await api.acceptTender(o.id); flash(`${t('Aceptado', 'Accepted')} · ${r.packages} ${t('paquetes', 'pkgs')}`); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
+  const decline = async (o: any) => { setBusy(o.id); try { await api.declineTender(o.id); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
+  const advance = async (d: any) => { const ns = nextStatus(d.status); if (!ns) return; setBusy(d.id); try { await api.advanceDelivery(d.id, ns); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
+
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 20px 12px' }}>
+          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><LangToggle /><button onClick={onLogout} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Salir', 'Sign out')}</button></div>
+        </div>
+        <div style={{ padding: '0 20px 8px' }}>
+          <span className="eyebrow" style={{ color: 'var(--brand-ink)' }}>{t('Hola', 'Hi')}{auth?.name ? `, ${auth.name.split(' ')[0]}` : ''}</span>
+          <h1 className="display" style={{ fontSize: 24, margin: '4px 0 0' }}>{t('Tus fletes', 'Your freight')}</h1>
+        </div>
+      </div>
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 20px' }}>
+        <div className="eyebrow" style={{ margin: '6px 0 8px' }}>{t('Ofertas', 'Offers')} ({offers.length})</div>
+        {!offers.length && <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>{t('No hay ofertas ahora.', 'No offers right now.')}</div>}
+        {offers.map((o) => (
+          <div key={o.id} className="card" style={{ padding: 14, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <strong style={{ fontSize: 15 }}>{parishName(o.parish)}</strong>
+              <span className="badge badge-brand">{o.packages} {t('paquetes', 'pkgs')}</span>
+            </div>
+            <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '3px 0 10px' }}>{t('Recoge en', 'Pick up at')} {o.hub}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy === o.id} onClick={() => accept(o)}>{t('Aceptar', 'Accept')}</button>
+              <button className="btn btn-ghost" disabled={busy === o.id} onClick={() => decline(o)}>{t('Rechazar', 'Decline')}</button>
+            </div>
+          </div>
+        ))}
+
+        <div className="eyebrow" style={{ margin: '18px 0 8px' }}>{t('Tus entregas', 'Your deliveries')}</div>
+        {!deliveries.length && <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>{t('Aún no tienes entregas.', 'No deliveries yet.')}</div>}
+        {deliveries.map((d) => {
+          const ns = nextStatus(d.status);
+          const terminal = d.status === 'delivered' || d.status === 'failed';
+          return (
+            <div key={d.id} className="card" style={{ padding: 14, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <strong style={{ fontSize: 15 }}>{parishName(d.parish) || d.reference}</strong>
+                {d.packages != null && <span className="badge badge-gray">{d.packages} {t('paquetes', 'pkgs')}</span>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8 }}>
+                <span className={`badge ${terminal ? (d.status === 'delivered' ? 'badge-brand' : 'badge-red') : 'badge-blue'}`}>{t(DLABEL[d.status]?.[0] || d.status, DLABEL[d.status]?.[1] || d.status)}</span>
+                {ns && <button className="btn btn-dark" style={{ padding: '7px 12px' }} disabled={busy === d.id} onClick={() => advance(d)}>{t('Marcar', 'Mark')} {t(DLABEL[ns][0], DLABEL[ns][1])}</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Toast msg={toast} />
+    </Phone>
+  );
+}
+
 // ── root ────────────────────────────────────────────────────────
-type View = 'loading' | 'welcome' | 'requirements' | 'wizard' | 'pending';
+type View = 'loading' | 'welcome' | 'requirements' | 'wizard' | 'pending' | 'login' | 'home';
 
 export function App() {
   const [lang, setLang] = useState<Lang>('en');
@@ -541,6 +671,7 @@ export function App() {
   // resume an in-flight application on load
   useEffect(() => {
     if (trackToken || rateToken) return;
+    if (driverAuth.get()) { setView('home'); return; } // signed-in driver
     const s = session.get();
     if (!s) { setView('welcome'); return; }
     api.get(s.id, s.token)
@@ -578,8 +709,10 @@ export function App() {
   return (
     <I18nCtx.Provider value={i18n}>
       {view === 'loading' && <Phone><div /></Phone>}
-      {view === 'welcome' && <Welcome onStart={() => setView('requirements')} />}
+      {view === 'welcome' && <Welcome onStart={() => setView('requirements')} onSignIn={() => setView('login')} />}
       {view === 'requirements' && <Requirements onAccept={start} onBack={() => setView('welcome')} />}
+      {view === 'login' && <DriverLogin onDone={() => setView('home')} onBack={() => setView('welcome')} />}
+      {view === 'home' && <DriverHome onLogout={() => { driverAuth.clear(); setView('welcome'); }} />}
       {view === 'wizard' && ref && (
         <Wizard appId={ref.id} token={ref.token} initialDraft={draft}
           onSubmitted={(app) => { setSubmitted({ reference: app.reference }); setView('pending'); }}
