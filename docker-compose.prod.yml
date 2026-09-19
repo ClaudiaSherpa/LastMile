@@ -58,7 +58,8 @@ services:
     depends_on:
       - api
     ports:
-      - "80:80"
+      # host port configurable (default 80); set WEB_PORT if 80 is taken by another proxy
+      - "${WEB_PORT:-80}:80"
 
 volumes:
   db_data:
