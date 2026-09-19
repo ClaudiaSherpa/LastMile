@@ -7,3 +7,4 @@ export * from './config.entity';
 export * from './rating.entity';
 export * from './audit.entity';
 export * from './whatsapp.entity';
+export * from './delivery-plan.entity';

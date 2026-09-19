@@ -1,0 +1,302 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import {
+  DeliveryPlanStatus,
+  DEFAULT_PACKAGE_CAPACITY,
+  PlanLineStatus,
+  PlanTenderStatus,
+  VehicleType,
+} from '@sherpa/shared';
+import {
+  DeliveryPlan,
+  DeliveryPlanLine,
+  DriverProfile,
+  PlanTender,
+  User,
+} from '../database/entities';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+
+export interface PlanLineInput {
+  parish: string;
+  packages: number;
+  preassigned?: string[]; // driver emails or phones
+}
+export interface CreatePlanInput {
+  name?: string;
+  hubName?: string;
+  vehicleCapacities?: Partial<Record<VehicleType, number>>;
+  lines: PlanLineInput[];
+}
+
+@Injectable()
+export class DeliveryPlanService {
+  private readonly logger = new Logger('DeliveryPlan');
+
+  constructor(
+    @InjectRepository(DeliveryPlan) private plans: Repository<DeliveryPlan>,
+    @InjectRepository(DeliveryPlanLine) private lines: Repository<DeliveryPlanLine>,
+    @InjectRepository(PlanTender) private tenders: Repository<PlanTender>,
+    @InjectRepository(DriverProfile) private drivers: Repository<DriverProfile>,
+    @InjectRepository(User) private users: Repository<User>,
+    private realtime: RealtimeGateway,
+  ) {}
+
+  private capacityOf(plan: DeliveryPlan, type?: VehicleType): number {
+    if (!type) return 0;
+    return plan.vehicleCapacities?.[type] ?? DEFAULT_PACKAGE_CAPACITY[type] ?? 0;
+  }
+
+  /** Resolve driver-profile ids from a list of emails/phones. */
+  private async resolveDrivers(identifiers: string[]): Promise<string[]> {
+    const ids: string[] = [];
+    for (const raw of identifiers) {
+      const id = (raw ?? '').trim();
+      if (!id) continue;
+      const user = await this.users.findOne({
+        where: [{ email: id }, { phone: id }],
+        relations: { driverProfile: true },
+      });
+      if (user?.driverProfile) ids.push(user.driverProfile.id);
+      else this.logger.warn(`preassigned driver not found: ${id}`);
+    }
+    return ids;
+  }
+
+  async create(input: CreatePlanInput): Promise<any> {
+    if (!input.lines?.length) throw new BadRequestException('Plan has no lines');
+    const count = await this.plans.count();
+    const capacities = { ...DEFAULT_PACKAGE_CAPACITY, ...(input.vehicleCapacities ?? {}) };
+
+    const plan = await this.plans.save(
+      this.plans.create({
+        reference: `DP-${1001 + count}`,
+        name: input.name,
+        hubName: input.hubName || 'PasarEx Hub',
+        vehicleCapacities: capacities,
+        status: DeliveryPlanStatus.DRAFT,
+      }),
+    );
+
+    for (const l of input.lines) {
+      if (!l.parish || !(l.packages > 0)) throw new BadRequestException(`Invalid line: ${JSON.stringify(l)}`);
+      const preassignedDriverIds = await this.resolveDrivers(l.preassigned ?? []);
+      await this.lines.save(
+        this.lines.create({
+          plan,
+          parish: l.parish,
+          requiredPackages: Math.round(l.packages),
+          preassignedDriverIds,
+          status: PlanLineStatus.PENDING,
+        }),
+      );
+    }
+    return this.get(plan.id);
+  }
+
+  /** Candidate drivers with the fields eligibility + capacity need. */
+  private async candidates(): Promise<
+    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType }>
+  > {
+    const list = await this.drivers.find({ relations: { vehicles: true, operatingAreas: true } });
+    return list.map((d) => ({
+      id: d.id,
+      securityCleared: d.securityCleared,
+      eligible: d.eligible,
+      zones: d.operatingAreas?.map((a) => a.slug) ?? [],
+      vehicle: d.vehicles?.[0]?.type as VehicleType | undefined,
+    }));
+  }
+
+  private eligibleForParish(c: { securityCleared: boolean; eligible: boolean; zones: string[] }, parish: string) {
+    return c.securityCleared && c.eligible && c.zones.includes(parish);
+  }
+
+  /**
+   * Broadcast a plan: order parishes scarcest-first, auto-accept pre-assigned
+   * drivers, then tender the remainder to eligible drivers (sized to vehicle).
+   */
+  async broadcast(planId: string): Promise<any> {
+    const plan = await this.plans.findOne({ where: { id: planId }, relations: { lines: true } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    if (plan.status !== DeliveryPlanStatus.DRAFT) throw new BadRequestException(`Plan is ${plan.status}`);
+
+    const cands = await this.candidates();
+    const byId = new Map(cands.map((c) => [c.id, c]));
+
+    // eligible count per line -> scarcest first
+    for (const line of plan.lines) {
+      line.eligibleCount = cands.filter((c) => this.eligibleForParish(c, line.parish)).length;
+    }
+    const ordered = [...plan.lines].sort((a, b) => a.eligibleCount - b.eligibleCount);
+
+    let order = 0;
+    for (const line of ordered) {
+      line.broadcastOrder = order++;
+      let accepted = 0;
+
+      // 1) pre-assigned drivers auto-accept their vehicle capacity
+      for (const drvId of line.preassignedDriverIds ?? []) {
+        const c = byId.get(drvId);
+        const cap = this.capacityOf(plan, c?.vehicle);
+        if (!c || cap <= 0) { this.logger.warn(`preassigned ${drvId} has no usable vehicle`); continue; }
+        await this.tenders.save(
+          this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }),
+        );
+        accepted += cap;
+        this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true });
+      }
+
+      // 2) tender the remainder to eligible (non-preassigned) drivers
+      if (accepted < line.requiredPackages) {
+        const pre = new Set(line.preassignedDriverIds ?? []);
+        const eligible = cands.filter((c) => this.eligibleForParish(c, line.parish) && !pre.has(c.id));
+        for (const c of eligible) {
+          const cap = this.capacityOf(plan, c.vehicle);
+          if (cap <= 0) continue;
+          await this.tenders.save(
+            this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, status: PlanTenderStatus.OFFERED }),
+          );
+          this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName });
+        }
+        line.status = eligible.length ? PlanLineStatus.BROADCASTING : (accepted >= line.requiredPackages ? PlanLineStatus.FILLED : PlanLineStatus.BROADCASTING);
+      } else {
+        line.status = PlanLineStatus.FILLED;
+      }
+
+      line.acceptedPackages = accepted;
+      await this.lines.save(line);
+    }
+
+    plan.status = DeliveryPlanStatus.BROADCASTING;
+    await this.plans.save(plan);
+    this.realtime.emitOps('plan.broadcast', { planId: plan.id, reference: plan.reference });
+    this.logger.log(`plan ${plan.reference} broadcast: ${ordered.length} parishes (scarcest-first)`);
+    return this.get(plan.id);
+  }
+
+  /** A driver accepts a tender for their parish (adds their package chunk). */
+  async accept(tenderId: string, driverId: string): Promise<any> {
+    return this.tenders.manager.transaction(async (em) => {
+      const tender = await em.findOne(PlanTender, { where: { id: tenderId }, relations: { line: { plan: true }, driver: true } });
+      if (!tender) throw new NotFoundException('Tender not found');
+      if (tender.driver?.id !== driverId) throw new BadRequestException('Not your tender');
+      if (tender.status !== PlanTenderStatus.OFFERED) throw new BadRequestException(`Tender is ${tender.status}`);
+
+      // lock the line so concurrent accepts don't overshoot / race the fill
+      const line = await em.findOne(DeliveryPlanLine, { where: { id: tender.line.id }, lock: { mode: 'pessimistic_write' } });
+      if (!line) throw new NotFoundException('Line not found');
+      if (line.status === PlanLineStatus.FILLED || line.status === PlanLineStatus.CANCELLED) {
+        tender.status = PlanTenderStatus.CANCELLED;
+        tender.respondedAt = new Date();
+        await em.save(tender);
+        throw new ConflictException('Parish already filled');
+      }
+
+      tender.status = PlanTenderStatus.ACCEPTED;
+      tender.respondedAt = new Date();
+      await em.save(tender);
+      line.acceptedPackages += tender.packages;
+
+      let filled = false;
+      if (line.acceptedPackages >= line.requiredPackages) {
+        line.status = PlanLineStatus.FILLED;
+        filled = true;
+        // cancel the remaining open offers on this line
+        const others = await em.find(PlanTender, { where: { line: { id: line.id }, status: PlanTenderStatus.OFFERED }, relations: { driver: true } });
+        for (const o of others) {
+          o.status = PlanTenderStatus.CANCELLED;
+          o.respondedAt = new Date();
+          await em.save(o);
+          this.realtime.emitDriver(o.driver.id, 'plan.tender.cancelled', { lineId: line.id, parish: line.parish, reason: 'filled' });
+        }
+      }
+      await em.save(line);
+
+      // plan completion check
+      const plan = tender.line.plan;
+      const open = await em.count(DeliveryPlanLine, { where: { plan: { id: plan.id }, status: PlanLineStatus.BROADCASTING } });
+      if (open === 0) {
+        await em.update(DeliveryPlan, { id: plan.id }, { status: DeliveryPlanStatus.COMPLETED });
+      }
+
+      this.realtime.emitOps('plan.tender.accepted', { planId: plan.id, lineId: line.id, parish: line.parish, driverId, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled });
+      return { ok: true, parish: line.parish, packages: tender.packages, accepted: line.acceptedPackages, required: line.requiredPackages, filled };
+    });
+  }
+
+  async decline(tenderId: string, driverId: string): Promise<any> {
+    const tender = await this.tenders.findOne({ where: { id: tenderId }, relations: { driver: true, line: true } });
+    if (!tender) throw new NotFoundException('Tender not found');
+    if (tender.driver?.id !== driverId) throw new BadRequestException('Not your tender');
+    if (tender.status !== PlanTenderStatus.OFFERED) return { ok: true, status: tender.status };
+    tender.status = PlanTenderStatus.DECLINED;
+    tender.respondedAt = new Date();
+    await this.tenders.save(tender);
+    return { ok: true };
+  }
+
+  /** Open tenders offered to a driver (for the driver app). */
+  async driverTenders(driverId: string): Promise<any[]> {
+    const rows = await this.tenders.find({
+      where: { driver: { id: driverId }, status: PlanTenderStatus.OFFERED },
+      relations: { line: { plan: true } },
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((t) => ({
+      id: t.id,
+      parish: t.line.parish,
+      packages: t.packages,
+      hub: t.line.plan.hubName,
+      plan: t.line.plan.reference,
+    }));
+  }
+
+  async list(): Promise<any[]> {
+    const rows = await this.plans.find({ order: { createdAt: 'DESC' }, take: 50 });
+    return rows.map((p) => ({ id: p.id, reference: p.reference, name: p.name, status: p.status, hubName: p.hubName, createdAt: p.createdAt }));
+  }
+
+  async get(planId: string): Promise<any> {
+    const plan = await this.plans.findOne({ where: { id: planId }, relations: { lines: true } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    const lines = [...plan.lines].sort((a, b) => (a.broadcastOrder ?? 99) - (b.broadcastOrder ?? 99) || a.parish.localeCompare(b.parish));
+    const withCounts = await Promise.all(
+      lines.map(async (l) => {
+        const [offered, accepted, declined] = await Promise.all([
+          this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.OFFERED } }),
+          this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.ACCEPTED } }),
+          this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.DECLINED } }),
+        ]);
+        const autoAccepted = await this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.AUTO_ACCEPTED } });
+        return {
+          id: l.id,
+          parish: l.parish,
+          requiredPackages: l.requiredPackages,
+          acceptedPackages: l.acceptedPackages,
+          eligibleCount: l.eligibleCount,
+          broadcastOrder: l.broadcastOrder,
+          status: l.status,
+          preassignedCount: l.preassignedDriverIds?.length ?? 0,
+          tenders: { offered, accepted, autoAccepted, declined },
+        };
+      }),
+    );
+    return {
+      id: plan.id,
+      reference: plan.reference,
+      name: plan.name,
+      hubName: plan.hubName,
+      status: plan.status,
+      vehicleCapacities: plan.vehicleCapacities,
+      createdAt: plan.createdAt,
+      lines: withCounts,
+    };
+  }
+}

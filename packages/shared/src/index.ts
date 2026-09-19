@@ -118,6 +118,40 @@ export enum DeliveryStatus {
   FAILED = 'failed',
 }
 
+// ── Delivery plans (bulk hub distribution) ──────────────────────
+export enum DeliveryPlanStatus {
+  DRAFT = 'draft',
+  BROADCASTING = 'broadcasting',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
+
+export enum PlanLineStatus {
+  PENDING = 'pending',
+  BROADCASTING = 'broadcasting',
+  FILLED = 'filled',
+  CANCELLED = 'cancelled',
+}
+
+export enum PlanTenderStatus {
+  OFFERED = 'offered',
+  ACCEPTED = 'accepted',
+  AUTO_ACCEPTED = 'auto_accepted', // pre-assigned driver, accepted by the system
+  DECLINED = 'declined',
+  CANCELLED = 'cancelled', // line filled by others / plan cancelled
+  EXPIRED = 'expired',
+}
+
+// Packages a single driver is tendered per trip, by vehicle type. Configurable
+// per plan (freight profile); these are the defaults.
+export const DEFAULT_PACKAGE_CAPACITY: Record<VehicleType, number> = {
+  [VehicleType.VAN]: 120,
+  [VehicleType.CARRO]: 80,
+  [VehicleType.MOTO]: 50,
+  [VehicleType.CAMIONETA]: 150,
+  [VehicleType.BICI]: 20,
+};
+
 // ── Scoring / tiers ─────────────────────────────────────────────
 export enum DriverTier {
   ELITE = 'elite',
