@@ -9,6 +9,7 @@ import {
   Delivery,
   Document,
   DocumentType,
+  DriverDay,
   DriverProfile,
   Freight,
   OperatingArea,
@@ -29,6 +30,7 @@ export class OverviewController {
     @InjectRepository(ApprovalStage) private stages: Repository<ApprovalStage>,
     @InjectRepository(Delivery) private deliveries: Repository<Delivery>,
     @InjectRepository(Document) private documents: Repository<Document>,
+    @InjectRepository(DriverDay) private driverDays: Repository<DriverDay>,
   ) {}
 
   @Get('overview')
@@ -147,6 +149,34 @@ export class OverviewController {
         expiryDate: d.expiryDate,
         issueDate: d.issueDate,
         hasFile: !!d.fileRef,
+      })),
+    };
+  }
+
+  /** Depot day-sheet statistics for a driver (delivery success + mileage). */
+  @Get('drivers/:id/day-stats')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  async driverDayStats(@Param('id') id: string) {
+    const rows = await this.driverDays.find({ where: { driverId: id }, order: { operationalDate: 'DESC' } });
+    const sum = (f: keyof typeof rows[number]) => rows.reduce((a, r) => a + ((r[f] as number) ?? 0), 0);
+    const picked = sum('packagesPicked');
+    const success = sum('successfulDeliveries');
+    const returned = sum('packagesReturned');
+    const mileage = rows.reduce((a, r) => a + (r.startMileage != null && r.endMileage != null ? r.endMileage - r.startMileage : 0), 0);
+    return {
+      days: rows.length,
+      packagesPicked: picked,
+      successfulDeliveries: success,
+      packagesReturned: returned,
+      successRate: picked ? Math.round((success / picked) * 100) : null,
+      mileage: Math.round(mileage * 10) / 10,
+      recent: rows.slice(0, 10).map((r) => ({
+        operationalDate: r.operationalDate,
+        packagesPicked: r.packagesPicked,
+        successfulDeliveries: r.successfulDeliveries,
+        packagesReturned: r.packagesReturned,
+        mileage: r.startMileage != null && r.endMileage != null ? Math.round((r.endMileage - r.startMileage) * 10) / 10 : null,
+        deliverySuccess: r.packagesPicked ? Math.round(((r.successfulDeliveries ?? 0) / r.packagesPicked) * 100) : null,
       })),
     };
   }

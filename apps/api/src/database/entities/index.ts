@@ -8,3 +8,4 @@ export * from './rating.entity';
 export * from './audit.entity';
 export * from './whatsapp.entity';
 export * from './delivery-plan.entity';
+export * from './driver-day.entity';

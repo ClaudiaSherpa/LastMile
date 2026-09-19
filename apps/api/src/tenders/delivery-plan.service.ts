@@ -34,6 +34,7 @@ export interface PlanLineInput {
 export interface CreatePlanInput {
   name?: string;
   hubName?: string;
+  operationalDate?: string; // YYYY-MM-DD
   vehicleCapacities?: Partial<Record<VehicleType, number>>;
   lines: PlanLineInput[];
 }
@@ -82,6 +83,7 @@ export class DeliveryPlanService {
         reference: `DP-${1001 + count}`,
         name: input.name,
         hubName: input.hubName || 'PasarEx Hub',
+        operationalDate: input.operationalDate || undefined,
         vehicleCapacities: capacities,
         status: DeliveryPlanStatus.DRAFT,
       }),
@@ -105,20 +107,27 @@ export class DeliveryPlanService {
 
   /** Candidate drivers with the fields eligibility + capacity need. */
   private async candidates(): Promise<
-    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType }>
+    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType; weekdays: number[] }>
   > {
-    const list = await this.drivers.find({ relations: { vehicles: true, operatingAreas: true } });
+    const list = await this.drivers.find({ relations: { vehicles: true, operatingAreas: true, availability: true } });
     return list.map((d) => ({
       id: d.id,
       securityCleared: d.securityCleared,
       eligible: d.eligible,
       zones: d.operatingAreas?.map((a) => a.slug) ?? [],
       vehicle: d.vehicles?.[0]?.type as VehicleType | undefined,
+      weekdays: Array.from(new Set((d.availability ?? []).map((s) => s.weekday))),
     }));
   }
 
-  private eligibleForParish(c: { securityCleared: boolean; eligible: boolean; zones: string[] }, parish: string) {
-    return c.securityCleared && c.eligible && c.zones.includes(parish);
+  private eligibleForParish(
+    c: { securityCleared: boolean; eligible: boolean; zones: string[]; weekdays: number[] },
+    parish: string,
+    weekday?: number | null,
+  ) {
+    const base = c.securityCleared && c.eligible && c.zones.includes(parish);
+    if (weekday == null) return base;
+    return base && c.weekdays.includes(weekday); // driver must work that day
   }
 
   /**
@@ -132,10 +141,12 @@ export class DeliveryPlanService {
 
     const cands = await this.candidates();
     const byId = new Map(cands.map((c) => [c.id, c]));
+    // only tender to drivers available on the plan's operational weekday
+    const weekday = plan.operationalDate ? new Date(`${plan.operationalDate}T00:00:00Z`).getUTCDay() : null;
 
     // eligible count per line -> scarcest first
     for (const line of plan.lines) {
-      line.eligibleCount = cands.filter((c) => this.eligibleForParish(c, line.parish)).length;
+      line.eligibleCount = cands.filter((c) => this.eligibleForParish(c, line.parish, weekday)).length;
     }
     const ordered = [...plan.lines].sort((a, b) => a.eligibleCount - b.eligibleCount);
 
@@ -159,7 +170,7 @@ export class DeliveryPlanService {
       // 2) tender the remainder to eligible (non-preassigned) drivers
       if (accepted < line.requiredPackages) {
         const pre = new Set(line.preassignedDriverIds ?? []);
-        const eligible = cands.filter((c) => this.eligibleForParish(c, line.parish) && !pre.has(c.id));
+        const eligible = cands.filter((c) => this.eligibleForParish(c, line.parish, weekday) && !pre.has(c.id));
         for (const c of eligible) {
           const cap = this.capacityOf(plan, c.vehicle);
           if (cap <= 0) continue;
@@ -277,7 +288,7 @@ export class DeliveryPlanService {
 
   async list(): Promise<any[]> {
     const rows = await this.plans.find({ order: { createdAt: 'DESC' }, take: 50 });
-    return rows.map((p) => ({ id: p.id, reference: p.reference, name: p.name, status: p.status, hubName: p.hubName, createdAt: p.createdAt }));
+    return rows.map((p) => ({ id: p.id, reference: p.reference, name: p.name, status: p.status, hubName: p.hubName, operationalDate: p.operationalDate, createdAt: p.createdAt }));
   }
 
   async get(planId: string): Promise<any> {
@@ -310,6 +321,7 @@ export class DeliveryPlanService {
       reference: plan.reference,
       name: plan.name,
       hubName: plan.hubName,
+      operationalDate: plan.operationalDate,
       status: plan.status,
       vehicleCapacities: plan.vehicleCapacities,
       createdAt: plan.createdAt,

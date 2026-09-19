@@ -1,9 +1,10 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post } from '@nestjs/common';
-import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { DeliveryStatus, Role } from '@sherpa/shared';
 import { JwtPayload } from '@sherpa/shared';
 import { CurrentUser, Public, Roles } from '../auth/decorators';
 import { TrackingService } from './tracking.service';
+import { DriverDayService } from './driver-day.service';
 
 class PingDto {
   @IsNumber() lat: number;
@@ -17,9 +18,52 @@ class StatusDto {
   @IsEnum(DeliveryStatus) status: DeliveryStatus;
 }
 
+class CheckInDto {
+  @IsOptional() @IsString() operationalDate?: string;
+  @IsOptional() @IsString() depotArrivalAt?: string;
+  @IsOptional() @IsInt() @Min(0) packagesPicked?: number;
+  @IsOptional() @IsString() depotDepartureAt?: string;
+  @IsOptional() @IsNumber() @Min(0) startMileage?: number;
+}
+
+class CheckOutDto {
+  @IsOptional() @IsString() operationalDate?: string;
+  @IsOptional() @IsString() depotReturnAt?: string;
+  @IsOptional() @IsNumber() @Min(0) endMileage?: number;
+  @IsOptional() @IsInt() @Min(0) successfulDeliveries?: number;
+  @IsOptional() @IsInt() @Min(0) packagesReturned?: number;
+}
+
 @Controller()
 export class TrackingController {
-  constructor(private readonly tracking: TrackingService) {}
+  constructor(
+    private readonly tracking: TrackingService,
+    private readonly driverDay: DriverDayService,
+  ) {}
+
+  private did(user: JwtPayload): string {
+    if (!user.driverId) throw new ForbiddenException('No driver profile for this account');
+    return user.driverId;
+  }
+
+  // ── driver depot day-sheet ──
+  @Get('driver/day')
+  @Roles(Role.DRIVER)
+  getDay(@CurrentUser() user: JwtPayload, @Query('date') date?: string) {
+    return this.driverDay.getDay(this.did(user), date);
+  }
+
+  @Post('driver/day/checkin')
+  @Roles(Role.DRIVER)
+  checkIn(@CurrentUser() user: JwtPayload, @Body() dto: CheckInDto) {
+    return this.driverDay.checkIn(this.did(user), dto);
+  }
+
+  @Post('driver/day/checkout')
+  @Roles(Role.DRIVER)
+  checkOut(@CurrentUser() user: JwtPayload, @Body() dto: CheckOutDto) {
+    return this.driverDay.checkOut(this.did(user), dto);
+  }
 
   /** Driver GPS stream. Authenticated driver only; identity comes from the JWT, not the body. */
   @Post('tracking/ping')

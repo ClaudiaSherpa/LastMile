@@ -566,6 +566,61 @@ function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => voi
   );
 }
 
+function DaySheet() {
+  const { t } = useI18n();
+  const [day, setDay] = useState<any>(null);
+  const [f, setF] = useState<any>({});
+  const [busy, setBusy] = useState('');
+  const load = () => api.getDay().then(setDay).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const timeOf = (iso?: string) => (iso ? new Date(iso).toTimeString().slice(0, 5) : '');
+  useEffect(() => {
+    if (!day) return;
+    setF({
+      arrival: timeOf(day.depotArrivalAt), picked: day.packagesPicked ?? '', departure: timeOf(day.depotDepartureAt), startKm: day.startMileage ?? '',
+      ret: timeOf(day.depotReturnAt), endKm: day.endMileage ?? '', success: day.successfulDeliveries ?? '', returned: day.packagesReturned ?? '',
+    });
+  }, [day?.operationalDate, day?.exists]);
+  const dateOf = day?.operationalDate || new Date().toISOString().slice(0, 10);
+  const iso = (tm?: string) => (tm ? new Date(`${dateOf}T${tm}:00`).toISOString() : undefined);
+  const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
+  const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
+
+  const checkIn = async () => { setBusy('in'); try { await api.dayCheckIn({ depotArrivalAt: iso(f.arrival), packagesPicked: num(f.picked), depotDepartureAt: iso(f.departure), startMileage: num(f.startKm) }); await load(); } finally { setBusy(''); } };
+  const checkOut = async () => { setBusy('out'); try { await api.dayCheckOut({ depotReturnAt: iso(f.ret), endMileage: num(f.endKm), successfulDeliveries: num(f.success), packagesReturned: num(f.returned) }); await load(); } finally { setBusy(''); } };
+
+  const cell = (label: string, node: React.ReactNode) => (<div style={{ marginBottom: 10 }}><label className="field-label">{label}</label>{node}</div>);
+  const numIn = (k: string, ph = '') => <input className="input mono" type="number" value={f[k] ?? ''} placeholder={ph} onChange={(e) => set(k, e.target.value)} />;
+  const timeIn = (k: string) => <input className="input mono" type="time" value={f[k] ?? ''} onChange={(e) => set(k, e.target.value)} />;
+
+  return (
+    <div className="card" style={{ padding: 14, marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span className="eyebrow">{t('Hoja del día', 'Day sheet')}</span>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{dateOf}{day?.deliverySuccess != null ? ` · ${t('éxito', 'success')} ${day.deliverySuccess}%` : ''}</span>
+      </div>
+      <div className="eyebrow" style={{ margin: '12px 0 8px', color: 'var(--brand-ink)' }}>{t('Llegada al depósito', 'Depot check-in')}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {cell(t('Hora de llegada', 'Arrival time'), timeIn('arrival'))}
+        {cell(t('Paquetes recogidos', 'Packages picked'), numIn('picked'))}
+        {cell(t('Hora de salida', 'Departure time'), timeIn('departure'))}
+        {cell(t('Millaje inicial', 'Start mileage'), numIn('startKm'))}
+      </div>
+      <button className="btn btn-ghost btn-block" disabled={busy === 'in'} onClick={checkIn}>{busy === 'in' ? '…' : t('Guardar llegada', 'Save check-in')}</button>
+
+      <div className="eyebrow" style={{ margin: '16px 0 8px', color: 'var(--brand-ink)' }}>{t('Fin del día', 'End of day')}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {cell(t('Hora de regreso', 'Return time'), timeIn('ret'))}
+        {cell(t('Millaje final', 'End mileage'), numIn('endKm'))}
+        {cell(t('Entregas exitosas', 'Successful deliveries'), numIn('success'))}
+        {cell(t('Paquetes devueltos', 'Packages returned'), numIn('returned'))}
+      </div>
+      <button className="btn btn-ghost btn-block" disabled={busy === 'out'} onClick={checkOut}>{busy === 'out' ? '…' : t('Guardar fin del día', 'Save end of day')}</button>
+      {day?.mileage != null && <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 10, textAlign: 'center' }}>{t('Millaje del día', 'Day mileage')}: <b>{day.mileage}</b></div>}
+    </div>
+  );
+}
+
 function DriverHome({ onLogout }: { onLogout: () => void }) {
   const { t, lang } = useI18n();
   const [offers, setOffers] = useState<any[]>([]);
@@ -611,6 +666,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
       <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 20px' }}>
+        <DaySheet />
         <div className="eyebrow" style={{ margin: '6px 0 8px' }}>{t('Ofertas', 'Offers')} ({offers.length})</div>
         {!offers.length && <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>{t('No hay ofertas ahora.', 'No offers right now.')}</div>}
         {offers.map((o) => (

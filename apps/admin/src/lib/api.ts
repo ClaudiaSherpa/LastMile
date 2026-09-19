@@ -74,6 +74,7 @@ export const api = {
       terms: { acceptedAt: string | null; version: string | null };
       documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
     }>(`/drivers/${id}/documents`),
+  driverDayStats: (id: string) => request<any>(`/drivers/${id}/day-stats`),
   applications: () => request<any[]>('/applications'),
   // approvals
   queue: () => request<any[]>('/approvals/queue'),

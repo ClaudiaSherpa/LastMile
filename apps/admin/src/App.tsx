@@ -186,6 +186,7 @@ function DeliveryPlans() {
   const [rows, setRows] = useState<any[]>([{ parish: '', packages: 100, preassigned: '' }]);
   const [caps, setCaps] = useState<Record<string, number>>({ van: 120, carro: 80, moto: 50, camioneta: 150, bici: 20 });
   const [name, setName] = useState('');
+  const [opDate, setOpDate] = useState<string>(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10)); // default tomorrow
   const [plans, setPlans] = useState<any[]>([]);
   const [sel, setSel] = useState<any>(null);
   const [busy, setBusy] = useState('');
@@ -237,7 +238,7 @@ function DeliveryPlans() {
     if (!lines.length) { setNote(t('Agrega al menos una parroquia con paquetes.', 'Add at least one parish with packages.')); return; }
     setBusy('create'); setNote('');
     try {
-      const p = await api.createPlan({ name: name || undefined, lines, vehicleCapacities: caps });
+      const p = await api.createPlan({ name: name || undefined, operationalDate: opDate || undefined, lines, vehicleCapacities: caps });
       await loadPlans(); setSel(p);
       setNote(t(`Plan ${p.reference} creado (borrador). Ahora difúndelo.`, `Plan ${p.reference} created (draft). Now broadcast it.`));
     } catch (e: any) { setNote(e.message); } finally { setBusy(''); }
@@ -258,7 +259,12 @@ function DeliveryPlans() {
               <button className="btn btn-ghost" style={{ padding: '6px 12px' }} onClick={() => fileRef.current?.click()}>{t('Subir CSV/Excel', 'Upload CSV/Excel')}</button>
             </div>
           </div>
-          <input className="input" placeholder={t('Nombre del plan (opcional)', 'Plan name (optional)')} value={name} onChange={(e) => setName(e.target.value)} style={{ marginBottom: 12 }} />
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <input className="input" placeholder={t('Nombre del plan (opcional)', 'Plan name (optional)')} value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
+            <label style={{ fontSize: 11, color: 'var(--ink-500)' }}>{t('Fecha operativa', 'Operational date')}<br />
+              <input className="input mono" type="date" value={opDate} onChange={(e) => setOpDate(e.target.value)} />
+            </label>
+          </div>
 
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -332,7 +338,7 @@ function DeliveryPlans() {
               <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
             </span>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: '4px 0 14px' }}>{t('Recogida', 'Pickup')}: {sel.hubName} · {t('parroquias por escasez de conductores', 'parishes by driver scarcity')}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: '4px 0 14px' }}>{sel.operationalDate ? `${sel.operationalDate} · ` : ''}{t('Recogida', 'Pickup')}: {sel.hubName} · {t('por escasez de conductores', 'by driver scarcity')}</div>
           {sel.status === 'draft' && <button className="btn btn-primary btn-block" style={{ marginBottom: 14 }} disabled={busy === sel.id} onClick={() => broadcast(sel.id)}>{t('Difundir plan', 'Broadcast plan')}</button>}
           <div style={{ display: 'grid', gap: 12 }}>
             {sel.lines.map((l: any) => (
@@ -732,7 +738,7 @@ function Compliance() {
 }
 
 // ── driver delivery breakdown (map dot / driver row detail) ─────
-function StatTile({ label, value, accent }: { label: string; value: number; accent: string }) {
+function StatTile({ label, value, accent }: { label: string; value: number | string; accent: string }) {
   return (
     <div className="card" style={{ padding: '12px 14px' }}>
       <div className="eyebrow">{label}</div>
@@ -745,14 +751,16 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
   const { t } = useI18n();
   const [stats, setStats] = useState<{ assigned: number; delivered: number; pending: number; failed: number } | null>(null);
   const [docs, setDocs] = useState<Awaited<ReturnType<typeof api.driverDocuments>> | null>(null);
+  const [dayStats, setDayStats] = useState<any>(null);
   const [err, setErr] = useState(false);
   const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     let live = true;
-    setStats(null); setDocs(null); setErr(false); setViewDoc(null);
+    setStats(null); setDocs(null); setDayStats(null); setErr(false); setViewDoc(null);
     api.driverStats(driverId).then((s) => live && setStats(s)).catch(() => live && setErr(true));
     api.driverDocuments(driverId).then((d) => live && setDocs(d)).catch(() => {});
+    api.driverDayStats(driverId).then((d) => live && setDayStats(d)).catch(() => {});
     return () => { live = false; };
   }, [driverId]);
 
@@ -784,6 +792,19 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
           <StatTile label={t('Fallidos', 'Failed')} value={stats.failed} accent="var(--red-ink)" />
         </div>
       )}
+
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Desempeño (hojas del día)', 'Performance (day sheets)')}</div>
+      {!dayStats && <div style={{ color: 'var(--ink-500)', fontSize: 13 }}>…</div>}
+      {dayStats && (dayStats.days === 0
+        ? <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Sin hojas del día todavía.', 'No day sheets yet.')}</div>
+        : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <StatTile label={t('Éxito entrega', 'Delivery success')} value={dayStats.successRate != null ? `${dayStats.successRate}%` : '—'} accent="var(--brand-ink)" />
+            <StatTile label={t('Entregados', 'Delivered')} value={dayStats.successfulDeliveries} accent="var(--ink-900)" />
+            <StatTile label={t('Devueltos', 'Returned')} value={dayStats.packagesReturned} accent="var(--red-ink)" />
+            <StatTile label={t('Millaje total', 'Total mileage')} value={dayStats.mileage} accent="var(--blue-ink)" />
+          </div>
+        ))}
 
       <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Documentos', 'Documents')}</div>
       <div style={{ display: 'grid', gap: 8 }}>

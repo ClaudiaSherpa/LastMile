@@ -13,6 +13,7 @@ class PlanLineDto {
 class CreatePlanDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() hubName?: string;
+  @IsOptional() @IsString() operationalDate?: string;
   @IsOptional() vehicleCapacities?: Record<string, number>;
   @IsArray() @ValidateNested({ each: true }) @Type(() => PlanLineDto) lines: PlanLineDto[];
 }

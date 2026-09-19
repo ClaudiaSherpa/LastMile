@@ -28,6 +28,10 @@ export class DeliveryPlan {
   @Column({ nullable: true })
   name?: string;
 
+  // the day this plan is operated — tenders go only to drivers available that weekday
+  @Column({ type: 'date', nullable: true })
+  operationalDate?: string;
+
   @Column({ default: 'PasarEx Hub' })
   hubName: string;
 
