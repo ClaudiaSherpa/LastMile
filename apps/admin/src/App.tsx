@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { api, auth } from './lib/api';
 import { I18nCtx, Lang, useI18n } from './lib/i18n';
 import { useEvent, useRoom } from './lib/socket';
@@ -83,6 +84,7 @@ const TABS = [
   ['approvals', 'Aprobaciones', 'Approvals'],
   ['compliance', 'Cumplimiento', 'Compliance'],
   ['freight', 'Fletes', 'Freight'],
+  ['plans', 'Planes', 'Delivery plans'],
   ['drivers', 'Conductores', 'Drivers'],
   ['messages', 'Mensajes', 'Messages'],
   ['config', 'Configuración', 'Config'],
@@ -92,6 +94,7 @@ const TABS = [
 const TAB_ROLES: Record<string, string[]> = {
   config: ['admin'],
   messages: ['admin', 'dispatcher'],
+  plans: ['admin', 'dispatcher'],
 };
 
 // Barbados bounding box -> 0..100% map space
@@ -177,6 +180,188 @@ function Messages() {
   );
 }
 
+const CAP_TYPES: Array<[string, string]> = [['van', 'Van'], ['carro', 'Car'], ['moto', 'Moto'], ['camioneta', 'Pickup'], ['bici', 'Bike']];
+const planLineBadge: Record<string, string> = { pending: 'badge-gray', broadcasting: 'badge-blue', filled: 'badge-brand', cancelled: 'badge-red' };
+
+function DeliveryPlans() {
+  const { t, lang } = useI18n();
+  const [zones, setZones] = useState<any[]>([]);
+  const [rows, setRows] = useState<any[]>([{ parish: '', packages: 100, preassigned: '' }]);
+  const [caps, setCaps] = useState<Record<string, number>>({ van: 120, carro: 80, moto: 50, camioneta: 150, bici: 20 });
+  const [name, setName] = useState('');
+  const [plans, setPlans] = useState<any[]>([]);
+  const [sel, setSel] = useState<any>(null);
+  const [busy, setBusy] = useState('');
+  const [note, setNote] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { connected } = useRoom('ops');
+
+  const loadPlans = () => api.plans().then(setPlans).catch(() => {});
+  useEffect(() => { api.zones().then(setZones).catch(() => {}); loadPlans(); }, []);
+  const openPlan = (id: string) => api.plan(id).then(setSel).catch(() => {});
+
+  // live refresh the monitored plan
+  const refresh = useCallback(() => { if (sel?.id) openPlan(sel.id); loadPlans(); }, [sel?.id]);
+  useEvent('plan.tender.accepted', refresh);
+  useEvent('plan.broadcast', refresh);
+
+  const zoneSlug = (raw: string) => {
+    const v = String(raw).toLowerCase().trim();
+    const z = zones.find((z) => z.slug === v || (z.nameEn || '').toLowerCase() === v || (z.nameEs || '').toLowerCase() === v);
+    return z?.slug || v;
+  };
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const json: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      const get = (r: any, keys: string[]) => { const k = Object.keys(r).find((kk) => keys.includes(kk.toLowerCase().trim())); return k ? r[k] : ''; };
+      const parsed = json.map((r) => ({
+        parish: zoneSlug(get(r, ['parish', 'zone', 'zona'])),
+        packages: parseInt(String(get(r, ['packages', 'quantity', 'qty', 'paquetes'])), 10) || 0,
+        preassigned: String(get(r, ['preassigned', 'drivers', 'conductores']) || '').split(/[;,]/).map((s) => s.trim()).filter(Boolean).join(', '),
+      })).filter((l) => l.packages > 0);
+      if (!parsed.length) { setNote(t('No se encontraron filas válidas (columnas: parish, packages, preassigned).', 'No valid rows found (columns: parish, packages, preassigned).')); return; }
+      setRows(parsed); setNote(t(`${parsed.length} filas cargadas del archivo.`, `${parsed.length} rows loaded from file.`));
+    } catch (err: any) { setNote(t('Error al leer el archivo: ', 'Failed to read file: ') + err.message); }
+  };
+
+  const setRow = (i: number, patch: any) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((rs) => [...rs, { parish: '', packages: 100, preassigned: '' }]);
+  const delRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
+
+  const create = async () => {
+    const lines = rows.filter((r) => r.parish && r.packages > 0).map((r) => ({
+      parish: r.parish, packages: Number(r.packages),
+      preassigned: String(r.preassigned || '').split(/[;,]/).map((s: string) => s.trim()).filter(Boolean),
+    }));
+    if (!lines.length) { setNote(t('Agrega al menos una parroquia con paquetes.', 'Add at least one parish with packages.')); return; }
+    setBusy('create'); setNote('');
+    try {
+      const p = await api.createPlan({ name: name || undefined, lines, vehicleCapacities: caps });
+      await loadPlans(); setSel(p);
+      setNote(t(`Plan ${p.reference} creado (borrador). Ahora difúndelo.`, `Plan ${p.reference} created (draft). Now broadcast it.`));
+    } catch (e: any) { setNote(e.message); } finally { setBusy(''); }
+  };
+  const broadcast = async (id: string) => { setBusy(id); try { setSel(await api.broadcastPlan(id)); await loadPlans(); } catch (e: any) { setNote(e.message); } finally { setBusy(''); } };
+
+  const pctOf = (l: any) => Math.min(100, Math.round((l.acceptedPackages / Math.max(1, l.requiredPackages)) * 100));
+
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {/* builder */}
+      <div style={{ flex: 1, minWidth: 300, display: 'grid', gap: 14 }}>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span className="eyebrow">{t('Nuevo plan de entrega', 'New delivery plan')} · {t('Recogida', 'Pickup')}: PasarEx Hub</span>
+            <div>
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={onFile} />
+              <button className="btn btn-ghost" style={{ padding: '6px 12px' }} onClick={() => fileRef.current?.click()}>{t('Subir CSV/Excel', 'Upload CSV/Excel')}</button>
+            </div>
+          </div>
+          <input className="input" placeholder={t('Nombre del plan (opcional)', 'Plan name (optional)')} value={name} onChange={(e) => setName(e.target.value)} style={{ marginBottom: 12 }} />
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr style={{ textAlign: 'left', color: 'var(--ink-500)' }}>
+                <th style={{ padding: '4px 6px' }}>{t('Parroquia', 'Parish')}</th>
+                <th style={{ padding: '4px 6px', width: 90 }}>{t('Paquetes', 'Packages')}</th>
+                <th style={{ padding: '4px 6px' }}>{t('Pre-asignados (correos/teléfonos)', 'Pre-assigned (emails/phones)')}</th>
+                <th></th>
+              </tr></thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '3px 6px' }}>
+                      <select className="select" value={r.parish} onChange={(e) => setRow(i, { parish: e.target.value })}>
+                        <option value="">—</option>
+                        {zones.map((z) => <option key={z.slug} value={z.slug}>{lang === 'es' ? z.nameEs : z.nameEn}</option>)}
+                      </select>
+                    </td>
+                    <td style={{ padding: '3px 6px' }}><input className="input mono" type="number" value={r.packages} onChange={(e) => setRow(i, { packages: e.target.value })} /></td>
+                    <td style={{ padding: '3px 6px' }}><input className="input" placeholder={t('opcional', 'optional')} value={r.preassigned} onChange={(e) => setRow(i, { preassigned: e.target.value })} /></td>
+                    <td style={{ padding: '3px 6px' }}><button className="btn btn-ghost" style={{ padding: '4px 9px' }} onClick={() => delRow(i)}>✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button className="btn btn-ghost" style={{ marginTop: 8, padding: '6px 12px' }} onClick={addRow}>+ {t('Parroquia', 'Parish')}</button>
+
+          <div style={{ marginTop: 14 }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Paquetes por vehículo (perfil de flete)', 'Packages per vehicle (freight profile)')}</div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {CAP_TYPES.map(([k, label]) => (
+                <label key={k} style={{ fontSize: 12, color: 'var(--ink-600)' }}>{t(label, label)}<br />
+                  <input className="input mono" style={{ width: 70 }} type="number" value={caps[k]} onChange={(e) => setCaps({ ...caps, [k]: Number(e.target.value) })} />
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {note && <div className="badge badge-amber" style={{ marginTop: 12, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+          <button className="btn btn-dark btn-block" style={{ marginTop: 12 }} disabled={busy === 'create'} onClick={create}>{busy === 'create' ? '…' : t('Crear plan', 'Create plan')}</button>
+        </div>
+
+        {/* plan list */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead><tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
+              <th style={{ padding: '10px 16px' }}>{t('Plan', 'Plan')}</th><th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th><th></th>
+            </tr></thead>
+            <tbody>
+              {plans.map((p) => (
+                <tr key={p.id} onClick={() => openPlan(p.id)} style={{ borderTop: '1px solid var(--line)', cursor: 'pointer', background: sel?.id === p.id ? 'var(--brand-tint)' : undefined }}>
+                  <td style={{ padding: '10px 16px', fontWeight: 600 }}>{p.reference}<div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', fontWeight: 400 }}>{p.name || '—'}</div></td>
+                  <td style={{ padding: '10px 16px' }}><span className={`badge ${p.status === 'completed' ? 'badge-brand' : p.status === 'broadcasting' ? 'badge-blue' : 'badge-gray'}`}>{p.status}</span></td>
+                  <td style={{ padding: '10px 16px' }}>{p.status === 'draft' && <button className="btn btn-primary" style={{ padding: '5px 11px' }} disabled={busy === p.id} onClick={(e) => { e.stopPropagation(); broadcast(p.id); }}>{t('Difundir', 'Broadcast')}</button>}</td>
+                </tr>
+              ))}
+              {!plans.length && <tr><td colSpan={3} style={{ padding: 16, color: 'var(--ink-500)' }}>{t('Sin planes todavía.', 'No plans yet.')}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* monitor */}
+      {sel && (
+        <div className="card" style={{ width: 380, maxWidth: '100%', flexShrink: 0, padding: 18, position: 'sticky', top: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="eyebrow">{sel.reference}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className={`badge ${sel.status === 'completed' ? 'badge-brand' : sel.status === 'broadcasting' ? 'badge-blue' : 'badge-gray'}`}>{sel.status}</span>
+              <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
+            </span>
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: '4px 0 14px' }}>{t('Recogida', 'Pickup')}: {sel.hubName} · {t('parroquias por escasez de conductores', 'parishes by driver scarcity')}</div>
+          {sel.status === 'draft' && <button className="btn btn-primary btn-block" style={{ marginBottom: 14 }} disabled={busy === sel.id} onClick={() => broadcast(sel.id)}>{t('Difundir plan', 'Broadcast plan')}</button>}
+          <div style={{ display: 'grid', gap: 12 }}>
+            {sel.lines.map((l: any) => (
+              <div key={l.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13.5 }}>{zones.find((z) => z.slug === l.parish) ? (lang === 'es' ? zones.find((z) => z.slug === l.parish).nameEs : zones.find((z) => z.slug === l.parish).nameEn) : l.parish}</span>
+                  <span className="mono" style={{ fontSize: 12 }}>{l.acceptedPackages}/{l.requiredPackages}</span>
+                </div>
+                <div style={{ height: 7, borderRadius: 99, background: 'var(--line)', overflow: 'hidden' }}>
+                  <div style={{ width: `${pctOf(l)}%`, height: '100%', background: l.status === 'filled' ? 'var(--brand)' : 'var(--blue)', transition: 'width .4s' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span className={`badge ${planLineBadge[l.status] || 'badge-gray'}`}>{l.status}</span>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{l.eligibleCount} {t('elegibles', 'eligible')}</span>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>· {l.tenders.accepted + l.tenders.autoAccepted} {t('acept.', 'acc.')} / {l.tenders.offered} {t('ofrec.', 'off.')}</span>
+                  {l.preassignedCount > 0 && <span className="badge badge-amber">{l.preassignedCount} {t('pre-asig.', 'pre-assgn')}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function useIsMobile(bp = 820) {
   const [m, setM] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth <= bp : false);
   useEffect(() => {
@@ -253,6 +438,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'compliance' && <Compliance />}
           {tab === 'freight' && <FreightScreen />}
+          {tab === 'plans' && <DeliveryPlans />}
           {tab === 'drivers' && <Drivers />}
           {tab === 'messages' && <Messages />}
           {tab === 'config' && <Config />}

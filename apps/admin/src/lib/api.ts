@@ -119,6 +119,11 @@ export const api = {
   cfgReorder: (order: string[]) => request<any>('/config/workflow/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
   scoringConfig: () => request<any>('/scoring/config'),
   scoringUpdate: (b: any) => request<any>('/scoring/config', { method: 'POST', body: JSON.stringify(b) }),
+  // ── delivery plans ──
+  plans: () => request<any[]>('/delivery-plans'),
+  plan: (id: string) => request<any>(`/delivery-plans/${id}`),
+  createPlan: (b: any) => request<any>('/delivery-plans', { method: 'POST', body: JSON.stringify(b) }),
+  broadcastPlan: (id: string) => request<any>(`/delivery-plans/${id}/broadcast`, { method: 'POST' }),
   // ── WhatsApp (Evolution) ──
   whatsappMessages: () => request<any[]>('/whatsapp/messages'),
   whatsappSend: (to: string, text: string, driverId?: string) =>
