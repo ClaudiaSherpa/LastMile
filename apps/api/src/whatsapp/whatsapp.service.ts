@@ -47,7 +47,7 @@ export class WhatsAppService {
       this.logger.warn(`Evolution API key missing; not sending to ${contact}`);
     } else {
       try {
-        const res = await fetch(`${url}/message/sendText/${instance}`, {
+        const res = await fetch(`${url}/message/sendText/${encodeURIComponent(instance)}`, {
           method: 'POST',
           headers: { apikey: key, 'Content-Type': 'application/json' },
           body: JSON.stringify({ number: contact, text }),
@@ -118,7 +118,7 @@ export class WhatsAppService {
     const { url, key, instance, webhookToken } = env.notify.evolution;
     if (!key) throw new BadRequestException('Evolution API key not configured');
     const webhookUrl = `${apiBaseUrl.replace(/\/$/, '')}/api/integrations/whatsapp/webhook?token=${webhookToken}`;
-    const res = await fetch(`${url}/webhook/set/${instance}`, {
+    const res = await fetch(`${url}/webhook/set/${encodeURIComponent(instance)}`, {
       method: 'POST',
       headers: { apikey: key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ webhook: { enabled: true, url: webhookUrl, events: ['MESSAGES_UPSERT'] } }),

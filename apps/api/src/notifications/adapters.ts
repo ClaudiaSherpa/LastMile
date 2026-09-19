@@ -56,7 +56,7 @@ export class WhatsappProvider implements NotificationProvider {
       this.logger.warn(`Evolution API key missing; would WhatsApp ${message.to}: ${message.body}`);
       return;
     }
-    await fetch(`${url}/message/sendText/${instance}`, {
+    await fetch(`${url}/message/sendText/${encodeURIComponent(instance)}`, {
       method: 'POST',
       headers: { apikey: key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ number: message.to, text: message.body }),
