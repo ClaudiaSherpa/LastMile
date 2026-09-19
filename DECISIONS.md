@@ -261,6 +261,20 @@ Running log of notable choices made while building, per the brief's instruction 
 - **Not yet done:** a driver-facing UI to view/accept plan tenders (API + WS exist), and creating a
   `Delivery` (fulfillment/tracking) record when a driver accepts a plan tender.
 
+## Freight removal + operational date + depot day-sheet
+- **Legacy freight removed.** The old single-shipment tender flow (FreightController/Service,
+  TenderService, pool, "Fletes" tab, sample-freight seed) was deleted now that delivery plans cover
+  freight. The `Freight`/`Tender` entities/tables were kept (dormant) because `Delivery.freight` and
+  the consignee tracking/rating path still reference them; a future migration could drop them.
+- **Operational date.** A plan carries `operationalDate`; broadcast tenders only to drivers available
+  that weekday (from their `AvailabilitySlot`s, 0=Sun..6=Sat), in addition to parish coverage +
+  security-clearance/eligibility. So a plan built today for tomorrow reaches only tomorrow's roster.
+- **Depot day-sheet + stats.** `DriverDay` (one per driver per operational date) records check-in
+  (arrival, packages picked, departure, start mileage) and end-of-day (return, end mileage, successful
+  deliveries, bring-backs). Delivery-success% = successful/picked and day mileage are computed; Ops
+  sees per-driver aggregates (`GET /drivers/:id/day-stats`). It's a per-driver daily depot record
+  (not per-parish-tender), matching the real one-trip-to-the-depot workflow.
+
 ## Known shortcuts (honest scope notes)
 - Tender wave advancement and the GPS feed are in-process (`setTimeout` / interval) — correct for a
   single API instance; a multi-instance deploy would move these to BullMQ/durable timers.
