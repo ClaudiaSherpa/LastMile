@@ -101,6 +101,8 @@ export const api = {
   declineTender: (id: string) => aj<any>(`/plan-tenders/${id}/decline`, { method: 'POST' }),
   myDeliveries: () => aj<any[]>('/driver/deliveries'),
   advanceDelivery: (id: string, status: string) => aj<any>(`/deliveries/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+  getProfile: () => aj<any>('/driver/profile'),
+  updateProfile: (b: any) => aj<any>('/driver/profile', { method: 'PATCH', body: JSON.stringify(b) }),
   getDay: (date?: string) => aj<any>(`/driver/day${date ? `?date=${date}` : ''}`),
   dayCheckIn: (b: any) => aj<any>('/driver/day/checkin', { method: 'POST', body: JSON.stringify(b) }),
   dayCheckOut: (b: any) => aj<any>('/driver/day/checkout', { method: 'POST', body: JSON.stringify(b) }),

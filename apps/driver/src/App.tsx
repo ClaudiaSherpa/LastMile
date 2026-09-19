@@ -621,6 +621,90 @@ function DaySheet() {
   );
 }
 
+const DOW: [number, string, string][] = [[1, 'Lun', 'Mon'], [2, 'Mar', 'Tue'], [3, 'Mié', 'Wed'], [4, 'Jue', 'Thu'], [5, 'Vie', 'Fri'], [6, 'Sáb', 'Sat'], [0, 'Dom', 'Sun']];
+
+function DriverProfileEdit({ onBack }: { onBack: () => void }) {
+  const { t, lang } = useI18n();
+  const [p, setP] = useState<any>(null);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => { api.getProfile().then((d) => setP({ ...d, vehicle: d.vehicle || {}, days: d.days || [], blocks: d.blocks || [], zones: d.zones || [] })).catch(() => {}); api.operatingAreas().then(setZones).catch(() => {}); }, []);
+
+  const setV = (k: string, v: any) => setP((s: any) => ({ ...s, vehicle: { ...s.vehicle, [k]: v } }));
+  const toggle = (key: 'days' | 'blocks' | 'zones', val: any) => setP((s: any) => { const arr = s[key] || []; return { ...s, [key]: arr.includes(val) ? arr.filter((x: any) => x !== val) : [...arr, val] }; });
+  const chip = (active: boolean, label: string, onClick: () => void, key: string) => (
+    <button key={key} onClick={onClick} style={{ border: '1px solid ' + (active ? 'var(--brand)' : 'var(--line)'), background: active ? 'var(--brand-tint)' : 'var(--surface)', color: active ? 'var(--brand-ink)' : 'var(--ink-700)', borderRadius: 999, padding: '7px 13px', fontSize: 13, fontWeight: 600 }}>{label}</button>
+  );
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await api.updateProfile({ vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones });
+      setP({ ...r, vehicle: r.vehicle || {}, days: r.days || [], blocks: r.blocks || [], zones: r.zones || [] });
+      setToast(t('Guardado', 'Saved')); setTimeout(() => setToast(null), 2200);
+    } catch (e: any) { setToast(e.message); setTimeout(() => setToast(null), 3000); } finally { setBusy(false); }
+  };
+
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 12px' }}>
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-700)' }}>‹</button>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', letterSpacing: '.08em' }}>PASAREX LM</span>
+          <LangToggle />
+        </div>
+        <div style={{ padding: '0 22px 8px' }}><h1 className="display" style={{ fontSize: 24, margin: 0 }}>{t('Mi perfil', 'My profile')}</h1></div>
+      </div>
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 20px' }}>
+        {!p && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+        {p && (<>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Vehículo', 'Vehicle')}</div>
+          <div style={{ display: 'grid', gap: 11, marginBottom: 8 }}>
+            {VEHICLES.map((v) => {
+              const on = p.vehicle.type === v.id;
+              return (
+                <button key={v.id} onClick={() => { setV('type', v.id); setV('capacity', lang === 'es' ? v.cap : v.capEn); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, textAlign: 'left', border: '1.5px solid ' + (on ? 'var(--brand)' : 'var(--line)'), background: on ? 'var(--brand-tint)' : 'var(--surface)' }}>
+                  <div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{lang === 'es' ? v.es : v.en}</div><div style={{ fontSize: 12, color: 'var(--ink-500)' }}>{lang === 'es' ? v.cap : v.capEn}</div></div>
+                  <div style={{ width: 20, height: 20, borderRadius: 999, border: '2px solid ' + (on ? 'var(--brand)' : 'var(--line)'), background: on ? 'var(--brand)' : 'transparent' }} />
+                </button>
+              );
+            })}
+          </div>
+          <Field label={t('Placa', 'Plate')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={p.vehicle.plate || ''} onChange={(e) => setV('plate', e.target.value)} placeholder="P 1234" /></Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label={t('Marca', 'Make')}><input className="input" value={p.vehicle.brand || ''} onChange={(e) => setV('brand', e.target.value)} /></Field>
+            <Field label={t('Modelo', 'Model')}><input className="input" value={p.vehicle.model || ''} onChange={(e) => setV('model', e.target.value)} /></Field>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label={t('Año', 'Year')}><input className="input mono" value={p.vehicle.year || ''} onChange={(e) => setV('year', e.target.value)} /></Field>
+            <Field label={t('Color', 'Color')}><input className="input" value={p.vehicle.color || ''} onChange={(e) => setV('color', e.target.value)} /></Field>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '10px 0 8px' }}>{t('Días disponibles', 'Available days')}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {DOW.map((d) => chip((p.days || []).includes(d[0]), lang === 'es' ? d[1] : d[2], () => toggle('days', d[0]), 'd' + d[0]))}
+          </div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Franjas horarias', 'Time blocks')}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {BLOCKS.map((b) => chip((p.blocks || []).includes(b[0]), (lang === 'es' ? b[1] : b[2]) + ` ${b[3]}`, () => toggle('blocks', b[0]), b[0]))}
+          </div>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Zonas de operación', 'Operating zones')}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {zones.map((z) => chip((p.zones || []).includes(z.slug), lang === 'es' ? z.nameEs : z.nameEn, () => toggle('zones', z.slug), z.slug))}
+          </div>
+        </>)}
+      </div>
+      <div style={{ padding: '12px 20px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
+        <button className="btn btn-primary btn-lg btn-block" disabled={!p || busy} onClick={save}>{busy ? '…' : t('Guardar cambios', 'Save changes')}</button>
+      </div>
+      <Toast msg={toast} />
+    </Phone>
+  );
+}
+
 function DriverHome({ onLogout }: { onLogout: () => void }) {
   const { t, lang } = useI18n();
   const [offers, setOffers] = useState<any[]>([]);
@@ -628,6 +712,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
   const [zones, setZones] = useState<Record<string, any>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState('');
+  const [screen, setScreen] = useState<'home' | 'profile'>('home');
   const sock = useRef<Socket | null>(null);
   const auth = driverAuth.get();
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
@@ -653,12 +738,17 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
   const decline = async (o: any) => { setBusy(o.id); try { await api.declineTender(o.id); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
   const advance = async (d: any) => { const ns = nextStatus(d.status); if (!ns) return; setBusy(d.id); try { await api.advanceDelivery(d.id, ns); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
 
+  if (screen === 'profile') return <DriverProfileEdit onBack={() => setScreen('home')} />;
+
   return (
     <Phone>
       <div style={{ paddingTop: 54 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 20px 12px' }}>
           <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><LangToggle /><button onClick={onLogout} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Salir', 'Sign out')}</button></div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => setScreen('profile')} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Perfil', 'Profile')}</button>
+            <LangToggle /><button onClick={onLogout} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Salir', 'Sign out')}</button>
+          </div>
         </div>
         <div style={{ padding: '0 20px 8px' }}>
           <span className="eyebrow" style={{ color: 'var(--brand-ink)' }}>{t('Hola', 'Hi')}{auth?.name ? `, ${auth.name.split(' ')[0]}` : ''}</span>

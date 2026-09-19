@@ -335,12 +335,13 @@ export class DeliveryPlanService {
     const lines = [...plan.lines].sort((a, b) => (a.broadcastOrder ?? 99) - (b.broadcastOrder ?? 99) || a.parish.localeCompare(b.parish));
     const withCounts = await Promise.all(
       lines.map(async (l) => {
-        const [offered, accepted, declined] = await Promise.all([
-          this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.OFFERED } }),
-          this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.ACCEPTED } }),
-          this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.DECLINED } }),
-        ]);
-        const autoAccepted = await this.tenders.count({ where: { line: { id: l.id }, status: PlanTenderStatus.AUTO_ACCEPTED } });
+        // all recipients this broadcast reached, with each one's status
+        const tenders = await this.tenders.find({
+          where: { line: { id: l.id } },
+          relations: { driver: { user: true, vehicles: true } },
+          order: { createdAt: 'ASC' },
+        });
+        const count = (s: PlanTenderStatus) => tenders.filter((t) => t.status === s).length;
         return {
           id: l.id,
           parish: l.parish,
@@ -350,7 +351,20 @@ export class DeliveryPlanService {
           broadcastOrder: l.broadcastOrder,
           status: l.status,
           preassignedCount: l.preassignedDriverIds?.length ?? 0,
-          tenders: { offered, accepted, autoAccepted, declined },
+          tenders: {
+            offered: count(PlanTenderStatus.OFFERED),
+            accepted: count(PlanTenderStatus.ACCEPTED),
+            autoAccepted: count(PlanTenderStatus.AUTO_ACCEPTED),
+            declined: count(PlanTenderStatus.DECLINED),
+          },
+          recipients: tenders.map((t) => ({
+            driverId: t.driver?.id,
+            name: t.driver?.user?.fullName ?? '—',
+            vehicle: t.driver?.vehicles?.[0]?.type,
+            packages: t.packages,
+            status: t.status,
+            preassigned: t.preassigned,
+          })),
         };
       }),
     );

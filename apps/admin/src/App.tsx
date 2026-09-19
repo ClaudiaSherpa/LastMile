@@ -191,6 +191,7 @@ function DeliveryPlans() {
   const [sel, setSel] = useState<any>(null);
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
+  const [openLine, setOpenLine] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { connected } = useRoom('ops');
 
@@ -341,8 +342,12 @@ function DeliveryPlans() {
           <div style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: '4px 0 14px' }}>{sel.operationalDate ? `${sel.operationalDate} · ` : ''}{t('Recogida', 'Pickup')}: {sel.hubName} · {t('por escasez de conductores', 'by driver scarcity')}</div>
           {sel.status === 'draft' && <button className="btn btn-primary btn-block" style={{ marginBottom: 14 }} disabled={busy === sel.id} onClick={() => broadcast(sel.id)}>{t('Difundir plan', 'Broadcast plan')}</button>}
           <div style={{ display: 'grid', gap: 12 }}>
-            {sel.lines.map((l: any) => (
-              <div key={l.id}>
+            {sel.lines.map((l: any) => {
+              const recips = l.recipients || [];
+              const open = openLine === l.id;
+              const rBadge = (s: string) => s === 'accepted' || s === 'auto_accepted' ? 'badge-brand' : s === 'declined' ? 'badge-amber' : s === 'cancelled' ? 'badge-red' : 'badge-gray';
+              return (
+              <div key={l.id} onClick={() => setOpenLine(open ? null : l.id)} style={{ cursor: recips.length ? 'pointer' : 'default' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
                   <span style={{ fontWeight: 600, fontSize: 13.5 }}>{zones.find((z) => z.slug === l.parish) ? (lang === 'es' ? zones.find((z) => z.slug === l.parish).nameEs : zones.find((z) => z.slug === l.parish).nameEn) : l.parish}</span>
                   <span className="mono" style={{ fontSize: 12 }}>{l.acceptedPackages}/{l.requiredPackages}</span>
@@ -355,9 +360,21 @@ function DeliveryPlans() {
                   <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{l.eligibleCount} {t('elegibles', 'eligible')}</span>
                   <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>· {l.tenders.accepted + l.tenders.autoAccepted} {t('acept.', 'acc.')} / {l.tenders.offered} {t('ofrec.', 'off.')}</span>
                   {l.preassignedCount > 0 && <span className="badge badge-amber">{l.preassignedCount} {t('pre-asig.', 'pre-assgn')}</span>}
+                  {recips.length > 0 && <span className="mono" style={{ fontSize: 11, color: 'var(--brand-ink)', marginLeft: 'auto' }}>{open ? '▾' : '▸'} {recips.length} {t('enviados', 'sent to')}</span>}
                 </div>
+                {open && recips.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 9, display: 'grid', gap: 6 }}>
+                    {recips.map((r: any, i: number) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}{r.preassigned ? ' ★' : ''}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{r.vehicle} · {r.packages}</span>
+                        <span className={`badge ${rBadge(r.status)}`}>{r.status === 'auto_accepted' ? t('auto', 'auto') : r.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))}
+            );})}
           </div>
         </div>
       )}
