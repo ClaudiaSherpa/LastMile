@@ -62,8 +62,8 @@ export const api = {
     }),
   me: () => request<{ sub: string; role: string; email?: string }>('/auth/me'),
   overview: () => request<any>('/overview'),
-  dashboard: (period: 'day' | 'week' | 'month', date?: string) =>
-    request<any>(`/dashboard?period=${period}${date ? `&date=${date}` : ''}`),
+  dashboard: (period: 'day' | 'week' | 'month', groupId?: string, date?: string) =>
+    request<any>(`/dashboard?period=${period}${groupId ? `&groupId=${groupId}` : ''}${date ? `&date=${date}` : ''}`),
   drivers: () => request<any[]>('/drivers'),
   driverStats: (id: string) =>
     request<{ driverId: string; assigned: number; delivered: number; pending: number; failed: number }>(

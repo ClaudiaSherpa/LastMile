@@ -12,6 +12,7 @@ import {
   OperatingArea,
 } from '../database/entities';
 import { OverviewController } from './overview.controller';
+import { MessagingModule } from '../messaging/messaging.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { OverviewController } from './overview.controller';
       Document,
       DriverDay,
     ]),
+    MessagingModule,
   ],
   controllers: [OverviewController],
 })

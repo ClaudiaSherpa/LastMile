@@ -703,9 +703,11 @@ function Dashboard() {
   const { t } = useI18n();
   const [o, setO] = useState<any>(null);
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week');
+  const [group, setGroup] = useState('all');
+  const [groups, setGroups] = useState<any[]>([]);
   const [d, setD] = useState<any>(null);
-  useEffect(() => { api.overview().then(setO).catch(() => {}); }, []);
-  useEffect(() => { setD(null); api.dashboard(period).then(setD).catch(() => setD(null)); }, [period]);
+  useEffect(() => { api.overview().then(setO).catch(() => {}); api.driverGroups().then(setGroups).catch(() => {}); }, []);
+  useEffect(() => { setD(null); api.dashboard(period, group === 'all' ? undefined : group).then(setD).catch(() => setD(null)); }, [period, group]);
   const tot = d?.totals;
 
   const pTab = (p: 'day' | 'week' | 'month', label: string) => (
@@ -718,6 +720,10 @@ function Dashboard() {
         {pTab('day', t('Hoy', 'Today'))}
         {pTab('week', t('7 días', '7 days'))}
         {pTab('month', t('30 días', '30 days'))}
+        <select className="input" style={{ width: 180, marginLeft: 8 }} value={group} onChange={(e) => setGroup(e.target.value)}>
+          <option value="all">{t('Todos los grupos', 'All groups')}</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
+        </select>
         {d && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{d.start} → {d.end}</span>}
       </div>
 

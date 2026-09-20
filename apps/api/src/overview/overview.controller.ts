@@ -1,6 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
+import { DriverGroupService } from '../messaging/driver-group.service';
 import { DeliveryStatus, Role } from '@sherpa/shared';
 import { Roles } from '../auth/decorators';
 import {
@@ -31,6 +32,7 @@ export class OverviewController {
     @InjectRepository(Delivery) private deliveries: Repository<Delivery>,
     @InjectRepository(Document) private documents: Repository<Document>,
     @InjectRepository(DriverDay) private driverDays: Repository<DriverDay>,
+    private groups: DriverGroupService,
   ) {}
 
   @Get('overview')
@@ -187,7 +189,7 @@ export class OverviewController {
    */
   @Get('dashboard')
   @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
-  async dashboard(@Query('period') period = 'week', @Query('date') date?: string) {
+  async dashboard(@Query('period') period = 'week', @Query('date') date?: string, @Query('groupId') groupId?: string) {
     const end = date ? new Date(`${date}T00:00:00Z`) : new Date();
     const endStr = end.toISOString().slice(0, 10);
     const start = new Date(end);
@@ -196,8 +198,17 @@ export class OverviewController {
     else { period = 'week'; start.setUTCDate(start.getUTCDate() - 6); }
     const startStr = start.toISOString().slice(0, 10);
 
+    // optional group filter → restrict to that group's members
+    let memberIds: string[] | null = null;
+    if (groupId) {
+      memberIds = await this.groups.memberIds(groupId);
+      if (!memberIds.length) {
+        return { period, start: startStr, end: endStr, groupId, totals: { activeDrivers: 0, daySheets: 0, packagesPicked: 0, packagesDelivered: 0, packagesReturned: 0, successRate: null, mileage: 0, onTimeRate: null }, drivers: [] };
+      }
+    }
+
     const rows = await this.driverDays.find({
-      where: { operationalDate: Between(startStr, endStr) },
+      where: { operationalDate: Between(startStr, endStr), ...(memberIds ? { driverId: In(memberIds) } : {}) },
       relations: { driver: { user: true } },
     });
 
