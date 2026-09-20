@@ -194,6 +194,7 @@ export class OnboardingService {
       this.drivers.create({
         user,
         cedula: draft.cedula,
+        address: draft.address,
         securityCleared: false,
         eligible: false,
         operatingAreas: zoneAreas,

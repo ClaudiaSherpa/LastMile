@@ -70,7 +70,7 @@ export const api = {
   driverDocuments: (id: string) =>
     request<{
       driverId: string;
-      driver: { name?: string; phone?: string; email?: string };
+      driver: { name?: string; phone?: string; email?: string; address?: string };
       terms: { acceptedAt: string | null; version: string | null };
       documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
     }>(`/drivers/${id}/documents`),

@@ -57,6 +57,10 @@ export class DriverProfile {
   @Column({ nullable: true })
   cedula?: string;
 
+  // home address (captured from the utility bill at onboarding)
+  @Column({ nullable: true })
+  address?: string;
+
   @Column({ type: 'enum', enum: DriverStatus, default: DriverStatus.OFFDUTY })
   status: DriverStatus;
 

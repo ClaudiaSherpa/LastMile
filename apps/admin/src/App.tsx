@@ -797,6 +797,12 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
           <a className="mono" href={`tel:${docs.driver.phone}`} style={{ color: 'var(--brand-ink)', textDecoration: 'none' }}>{docs.driver.phone}</a>
         </div>
       )}
+      {docs?.driver?.address && (
+        <div style={{ marginTop: 4, fontSize: 13 }}>
+          <span style={{ color: 'var(--ink-500)' }}>{t('Dirección', 'Address')}: </span>
+          <span>{docs.driver.address}</span>
+        </div>
+      )}
 
       <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Entregas', 'Deliveries')}</div>
       {err && <div className="badge badge-red">{t('No se pudo cargar', 'Failed to load')}</div>}

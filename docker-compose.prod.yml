@@ -48,6 +48,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    volumes:
+      # persist uploaded driver documents across container rebuilds/redeploys.
+      # WORKDIR is /repo/apps/api and STORAGE_LOCAL_DIR defaults to ./storage.
+      - storage_data:/repo/apps/api/storage
     # run migrations, then boot the API (single instance)
     command: sh -c "cd /repo && npm run migration:run:prod -w @sherpa/api && npm run start -w @sherpa/api"
 
@@ -65,3 +69,4 @@ services:
 volumes:
   db_data:
   redis_data:
+  storage_data:

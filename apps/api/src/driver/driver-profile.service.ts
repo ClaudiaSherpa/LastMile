@@ -9,6 +9,7 @@ export interface UpdateProfileInput {
   zones?: string[]; // operating-area slugs
   days?: number[]; // weekday 0=Sun..6=Sat
   blocks?: string[]; // madrugada|manana|tarde|noche
+  address?: string;
 }
 
 @Injectable()
@@ -31,6 +32,7 @@ export class DriverProfileService {
       name: d.user?.fullName,
       phone: d.user?.phone,
       email: d.user?.email,
+      address: d.address,
       status: d.status,
       eligible: d.eligible,
       securityCleared: d.securityCleared,
@@ -46,6 +48,12 @@ export class DriverProfileService {
   async update(driverId: string, input: UpdateProfileInput) {
     const d = await this.drivers.findOne({ where: { id: driverId }, relations: { vehicles: true, operatingAreas: true } });
     if (!d) throw new NotFoundException('Driver not found');
+
+    // home address
+    if (input.address != null) {
+      d.address = input.address;
+      await this.drivers.save(d);
+    }
 
     // vehicle
     if (input.vehicle) {

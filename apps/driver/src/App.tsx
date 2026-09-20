@@ -281,7 +281,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
   const allRequiredUploaded = requiredDocs.every((d) => draft.docs?.[d.key]);
 
   const canNext = () => {
-    if (step === 0) return draft.name && draft.phone && draft.cedula;
+    if (step === 0) return draft.name && draft.phone && draft.cedula && draft.address;
     if (step === 1) return !!draft.vehicle;
     if (step === 2) return draft.plate && draft.brand && draft.year;
     if (step === 3) return allRequiredUploaded && password.trim().length >= 6;
@@ -383,6 +383,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
             <Field label={t('Documento nacional', 'National ID')}><input className="input mono" value={draft.cedula || ''} onChange={(e) => set({ cedula: e.target.value })} placeholder="850101-1234" /></Field>
             <Field label={t('Celular', 'Mobile')}><input className="input mono" value={draft.phone || ''} onChange={(e) => set({ phone: e.target.value })} placeholder="+1 246 XXX XXXX" /></Field>
             <Field label={t('Correo (opcional)', 'Email (optional)')}><input className="input" value={draft.email || ''} onChange={(e) => set({ email: e.target.value })} placeholder="tu@correo.com" /></Field>
+            <Field label={t('Dirección (según factura de servicios)', 'Address (as on your utility bill)')}><input className="input" value={draft.address || ''} onChange={(e) => set({ address: e.target.value })} placeholder={t('Calle, ciudad, parroquia', 'Street, city, parish')} /></Field>
           </>)}
 
           {step === 1 && (
@@ -493,6 +494,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
               {[
                 [t('Nombre', 'Name'), draft.name || '—'],
                 [t('Documento', 'ID'), draft.cedula || '—'],
+                [t('Dirección', 'Address'), draft.address || '—'],
                 [t('Vehículo', 'Vehicle'), `${VEHICLES.find((v) => v.id === draft.vehicle)?.[lang === 'es' ? 'es' : 'en'] || '—'} · ${draft.plate || '—'}`],
                 [t('Documentos', 'Documents'), `${Object.values(draft.docs || {}).filter(Boolean).length} ${t('cargados', 'uploaded')}`],
                 [t('Zonas', 'Zones'), (draft.zones || []).join(', ') || '—'],
@@ -641,7 +643,7 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
   const save = async () => {
     setBusy(true);
     try {
-      const r = await api.updateProfile({ vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones });
+      const r = await api.updateProfile({ vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones, address: p.address });
       setP({ ...r, vehicle: r.vehicle || {}, days: r.days || [], blocks: r.blocks || [], zones: r.zones || [] });
       setToast(t('Guardado', 'Saved')); setTimeout(() => setToast(null), 2200);
     } catch (e: any) { setToast(e.message); setTimeout(() => setToast(null), 3000); } finally { setBusy(false); }
@@ -660,6 +662,8 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
       <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 20px' }}>
         {!p && <div style={{ color: 'var(--ink-500)' }}>…</div>}
         {p && (<>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Dirección', 'Address')}</div>
+          <Field label={t('Dirección (según factura de servicios)', 'Address (as on your utility bill)')}><input className="input" value={p.address || ''} onChange={(e) => setP({ ...p, address: e.target.value })} placeholder={t('Calle, ciudad, parroquia', 'Street, city, parish')} /></Field>
           <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Vehículo', 'Vehicle')}</div>
           <div style={{ display: 'grid', gap: 11, marginBottom: 8 }}>
             {VEHICLES.map((v) => {

@@ -61,6 +61,7 @@ async function run() {
     docTypeRepo.create({ key: 'insurance', nameEs: 'Comprehensive cover (optional)', nameEn: 'Comprehensive cover (optional)', appliesTo: DocAppliesTo.VEHICLE, required: false, tracksExpiry: true, reminderOffsets: [30, 15], sortOrder: 3 }),
     docTypeRepo.create({ key: 'property', nameEs: 'Vehicle registration', nameEn: 'Vehicle registration', appliesTo: DocAppliesTo.VEHICLE, required: true, tracksExpiry: false, sortOrder: 4 }),
     docTypeRepo.create({ key: 'id', nameEs: 'National ID + selfie', nameEn: 'National ID + selfie', appliesTo: DocAppliesTo.DRIVER, required: true, tracksExpiry: false, sortOrder: 5 }),
+    docTypeRepo.create({ key: 'utility_bill', nameEs: 'Factura de servicios (comprobante de domicilio)', nameEn: 'Utility bill (proof of address)', appliesTo: DocAppliesTo.DRIVER, required: true, tracksExpiry: false, sortOrder: 6 }),
   ]);
   console.log(`  ✓ ${docTypes.length} document types`);
 
@@ -86,7 +87,7 @@ async function run() {
   const stageRepo = ds.getRepository(ApprovalStage);
   const workflow = await wfRepo.save(wfRepo.create({ name: 'Onboarding estándar', active: true }));
   const stages = await stageRepo.save([
-    stageRepo.create({ workflow, nameEs: 'Validación de documentos', nameEn: 'Document validation', sortOrder: 1, mode: StageMode.AUTOMATIC, responsibleRole: Role.DISPATCHER, requiredDocs: ['license', 'soat', 'property', 'id'], ruleset: { requireAllRequiredDocs: true }, slaHours: 4 }),
+    stageRepo.create({ workflow, nameEs: 'Validación de documentos', nameEn: 'Document validation', sortOrder: 1, mode: StageMode.AUTOMATIC, responsibleRole: Role.DISPATCHER, requiredDocs: ['license', 'soat', 'property', 'id', 'utility_bill'], ruleset: { requireAllRequiredDocs: true }, slaHours: 4 }),
     stageRepo.create({ workflow, nameEs: 'Verificación de seguridad', nameEn: 'Security clearance', sortOrder: 2, mode: StageMode.MANUAL, responsibleRole: Role.SECURITY_OFFICER, isSecurityClearance: true, slaHours: 48 }),
     stageRepo.create({ workflow, nameEs: 'Aprobación final', nameEn: 'Final approval', sortOrder: 3, mode: StageMode.MANUAL, responsibleRole: Role.DISPATCHER, slaHours: 24 }),
   ]);

@@ -139,7 +139,7 @@ export class OverviewController {
     const draft = (app?.draft as Record<string, any>) ?? {};
     return {
       driverId: id,
-      driver: { name: driver.user?.fullName, phone: driver.user?.phone, email: driver.user?.email },
+      driver: { name: driver.user?.fullName, phone: driver.user?.phone, email: driver.user?.email, address: driver.address },
       terms: { acceptedAt: draft.termsAcceptedAt ?? null, version: draft.termsVersion ?? null },
       documents: docs.map((d) => ({
         id: d.id,
