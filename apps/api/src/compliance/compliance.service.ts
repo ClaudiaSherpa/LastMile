@@ -107,7 +107,7 @@ export class ComplianceService {
     const docs = await this.documents.find({ where: { driver: { id: driverId } }, relations: { documentType: true } });
     const res = computeEligibility(
       driver.securityCleared,
-      docs.map((d) => ({ required: d.documentType.required, status: d.status, expiryDate: d.expiryDate })),
+      docs.map((d) => ({ required: d.documentType.required, status: d.status, expiryDate: d.expiryDate, tracksExpiry: d.documentType.tracksExpiry })),
     );
     if (res.eligible === driver.eligible) return false;
     const wasEligible = driver.eligible;

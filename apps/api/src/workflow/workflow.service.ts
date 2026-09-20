@@ -211,7 +211,7 @@ export class WorkflowService {
       });
       const elig = computeEligibility(
         app.driver.securityCleared,
-        docs.map((d) => ({ required: d.documentType.required, status: d.status, expiryDate: d.expiryDate })),
+        docs.map((d) => ({ required: d.documentType.required, status: d.status, expiryDate: d.expiryDate, tracksExpiry: d.documentType.tracksExpiry })),
       );
       app.driver.eligible = elig.eligible;
       await this.drivers.save(app.driver);

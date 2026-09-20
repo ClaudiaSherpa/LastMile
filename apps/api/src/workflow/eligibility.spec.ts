@@ -24,6 +24,12 @@ describe('computeEligibility', () => {
     expect(res).toEqual({ eligible: false, reason: 'required_doc_expired' });
   });
 
+  it('does not expire a required doc whose type does not track expiry', () => {
+    // e.g. a utility bill (proof of address): a stored/old date must not suspend eligibility
+    const res = computeEligibility(true, [approved({ expiryDate: '2000-01-01', tracksExpiry: false })], new Date('2026-06-10'));
+    expect(res).toEqual({ eligible: true, reason: 'ok' });
+  });
+
   it('ignores optional docs', () => {
     const res = computeEligibility(true, [
       approved(),

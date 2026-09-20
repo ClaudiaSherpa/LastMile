@@ -4,6 +4,10 @@ export interface DocLike {
   required: boolean;
   status: DocumentStatus;
   expiryDate?: string | null;
+  // whether this document type tracks expiry; when false, a stored expiry date
+  // (e.g. on a proof-of-address utility bill) must NOT make the driver expired.
+  // Defaults to true so callers that don't pass it keep the old behaviour.
+  tracksExpiry?: boolean;
 }
 
 /**
@@ -22,7 +26,7 @@ export function computeEligibility(
     if (d.status !== DocumentStatus.APPROVED) {
       return { eligible: false, reason: 'required_doc_not_approved' };
     }
-    if (d.expiryDate && new Date(d.expiryDate) < now) {
+    if (d.tracksExpiry !== false && d.expiryDate && new Date(d.expiryDate) < now) {
       return { eligible: false, reason: 'required_doc_expired' };
     }
   }
