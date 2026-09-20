@@ -572,11 +572,18 @@ function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => voi
   );
 }
 
+const DAY_STATUS: Record<string, [string, string, string]> = {
+  checked_in: ['Registrado', 'Checked in', 'badge-gray'],
+  departed: ['Salió · en ruta', 'Departed', 'badge-blue'],
+  completed: ['Completado', 'Completed', 'badge-brand'],
+};
+
 function DaySheet() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [day, setDay] = useState<any>(null);
   const [f, setF] = useState<any>({});
   const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState<{ type: 'err' | 'warn' | 'ok'; text: string } | null>(null);
   const load = () => api.getDay().then(setDay).catch(() => {});
   useEffect(() => { load(); }, []);
   const timeOf = (iso?: string) => (iso ? new Date(iso).toTimeString().slice(0, 5) : '');
@@ -592,8 +599,44 @@ function DaySheet() {
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
 
-  const checkIn = async () => { setBusy('in'); try { await api.dayCheckIn({ depotArrivalAt: iso(f.arrival), packagesPicked: num(f.picked), depotDepartureAt: iso(f.departure), startMileage: num(f.startKm) }); await load(); } finally { setBusy(''); } };
-  const checkOut = async () => { setBusy('out'); try { await api.dayCheckOut({ depotReturnAt: iso(f.ret), endMileage: num(f.endKm), successfulDeliveries: num(f.success), packagesReturned: num(f.returned) }); await load(); } finally { setBusy(''); } };
+  const dayKm = (() => { const s = num(f.startKm), e = num(f.endKm); return s != null && e != null ? Math.round((e - s) * 10) / 10 : null; })();
+
+  const checkIn = async () => {
+    setBusy('in'); setMsg(null);
+    try {
+      await api.dayCheckIn({ depotArrivalAt: iso(f.arrival), packagesPicked: num(f.picked), depotDepartureAt: iso(f.departure), startMileage: num(f.startKm) });
+      await load();
+      if (f.departure) setMsg({ type: 'ok', text: t('Salida registrada · ruta en curso.', 'Departure saved · route in progress.') });
+    } catch (e: any) { setMsg({ type: 'err', text: e.message }); } finally { setBusy(''); }
+  };
+
+  const checkOut = async () => {
+    setMsg(null);
+    const startKm = num(f.startKm), endKm = num(f.endKm);
+    const picked = num(f.picked), delivered = num(f.success), returned = num(f.returned);
+    // end mileage must be greater than start
+    if (endKm != null && startKm != null && endKm <= startKm) {
+      setMsg({ type: 'err', text: t('El millaje final debe ser mayor que el inicial.', 'End mileage must be greater than the start mileage.') }); return;
+    }
+    // day mileage sanity: error > 200, warning > 100
+    if (dayKm != null && dayKm > 200) {
+      setMsg({ type: 'err', text: t(`Millaje del día ${dayKm} km supera 200 km. Verifica el odómetro.`, `Day mileage ${dayKm} km exceeds 200 km. Please verify the odometer.`) }); return;
+    }
+    // delivered + returned must equal packages picked up
+    if (picked != null && delivered != null && returned != null && delivered + returned !== picked) {
+      setMsg({ type: 'err', text: t(`Entregados (${delivered}) + devueltos (${returned}) deben igualar los recogidos (${picked}).`, `Delivered (${delivered}) + returned (${returned}) must equal packages picked up (${picked}).`) }); return;
+    }
+    if (dayKm != null && dayKm > 100) {
+      const okc = window.confirm(t(`El millaje del día es ${dayKm} km (más de 100 km). ¿Es correcto?`, `Day mileage is ${dayKm} km (over 100 km). Is this correct?`));
+      if (!okc) return;
+    }
+    setBusy('out');
+    try {
+      await api.dayCheckOut({ depotReturnAt: iso(f.ret), endMileage: endKm, successfulDeliveries: delivered, packagesReturned: returned });
+      await load();
+      setMsg({ type: 'ok', text: t('Fin del día guardado.', 'End of day saved.') });
+    } catch (e: any) { setMsg({ type: 'err', text: e.message }); } finally { setBusy(''); }
+  };
 
   const cell = (label: string, node: React.ReactNode) => (<div style={{ marginBottom: 10 }}><label className="field-label">{label}</label>{node}</div>);
   const numIn = (k: string, ph = '') => <input className="input mono" type="number" value={f[k] ?? ''} placeholder={ph} onChange={(e) => set(k, e.target.value)} />;
@@ -601,9 +644,12 @@ function DaySheet() {
 
   return (
     <div className="card" style={{ padding: 14, marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <span className="eyebrow">{t('Hoja del día', 'Day sheet')}</span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{dateOf}{day?.deliverySuccess != null ? ` · ${t('éxito', 'success')} ${day.deliverySuccess}%` : ''}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {day?.status && DAY_STATUS[day.status] && <span className={`badge ${DAY_STATUS[day.status][2]}`}>{lang === 'es' ? DAY_STATUS[day.status][0] : DAY_STATUS[day.status][1]}</span>}
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{dateOf}{day?.deliverySuccess != null ? ` · ${t('éxito', 'success')} ${day.deliverySuccess}%` : ''}</span>
+        </div>
       </div>
       <div className="eyebrow" style={{ margin: '12px 0 8px', color: 'var(--brand-ink)' }}>{t('Llegada al depósito', 'Depot check-in')}</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -622,7 +668,19 @@ function DaySheet() {
         {cell(t('Paquetes devueltos', 'Packages returned'), numIn('returned'))}
       </div>
       <button className="btn btn-ghost btn-block" disabled={busy === 'out'} onClick={checkOut}>{busy === 'out' ? '…' : t('Guardar fin del día', 'Save end of day')}</button>
-      {day?.mileage != null && <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 10, textAlign: 'center' }}>{t('Millaje del día', 'Day mileage')}: <b>{day.mileage}</b></div>}
+      {dayKm != null && (
+        <div style={{ fontSize: 12, marginTop: 10, textAlign: 'center', color: dayKm > 200 ? 'var(--red-ink, #b3261e)' : dayKm > 100 ? 'var(--amber-ink, #7a5a00)' : 'var(--ink-500)' }}>
+          {t('Millaje del día', 'Day mileage')}: <b>{dayKm} km</b>
+          {dayKm > 200 ? ` · ${t('supera 200 km', 'over 200 km')}` : dayKm > 100 ? ` · ${t('supera 100 km — verifica', 'over 100 km — please verify')}` : ''}
+        </div>
+      )}
+      {msg && (
+        <div style={{ marginTop: 10, fontSize: 12.5, textAlign: 'center', padding: '8px 10px', borderRadius: 9,
+          background: msg.type === 'err' ? 'var(--red-tint, #fde8e6)' : msg.type === 'warn' ? 'var(--amber-tint, #fdf1d6)' : 'var(--brand-tint)',
+          color: msg.type === 'err' ? 'var(--red-ink, #b3261e)' : msg.type === 'warn' ? 'var(--amber-ink, #7a5a00)' : 'var(--brand-ink)' }}>
+          {msg.text}
+        </div>
+      )}
     </div>
   );
 }
