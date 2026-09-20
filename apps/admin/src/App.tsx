@@ -1361,14 +1361,16 @@ function RoadsLayer() {
   );
 }
 
-// The day's plan for the live map: every driver on a plan for the chosen date,
-// with parish, package count (actual once picked up, else the tendered/capacity
-// number) and status. Updates live on broadcast/accept.
+// The day's plan for the live map, broken down PER PLAN: each plan shows its
+// parish lines and the drivers on each, with per-plan packages and status.
 const prettyParish = (slug: string) => (slug || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const dayStatusBadge: Record<string, string> = {
   delivered: 'badge-brand', en_route: 'badge-blue', picked_up: 'badge-blue', en_route_pickup: 'badge-blue',
   accepted: 'badge-brand', auto_accepted: 'badge-brand', assigned: 'badge-gray',
   offered: 'badge-amber', declined: 'badge-gray', cancelled: 'badge-red', failed: 'badge-red',
+};
+const planStatusBadge: Record<string, string> = {
+  draft: 'badge-gray', broadcasting: 'badge-blue', completed: 'badge-brand', cancelled: 'badge-red', unfeasible: 'badge-red',
 };
 
 function DayPlanTable() {
@@ -1380,9 +1382,8 @@ function DayPlanTable() {
   useEvent('plan.tender.accepted', useCallback(() => load(), [load]));
   useEvent('plan.broadcast', useCallback(() => load(), [load]));
 
-  const rows: any[] = data?.rows ?? [];
-  const totalPkgs = rows.reduce((s, r) => s + (r.packages || 0), 0);
-  const driverCount = new Set(rows.map((r) => r.driverId)).size;
+  const plans: any[] = data?.plans ?? [];
+  const totals = data?.totals ?? { drivers: 0, assignments: 0, packages: 0 };
 
   return (
     <div className="card" style={{ flex: 1, minWidth: 300, padding: 16, alignSelf: 'stretch' }}>
@@ -1390,49 +1391,53 @@ function DayPlanTable() {
         <span className="eyebrow">{t('Plan del día', "Day's plan")}</span>
         <input className="input mono" type="date" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 10 }}>
-        {driverCount} {t('conductores', 'drivers')} · {rows.length} {t('asignaciones', 'assignments')} · {totalPkgs} {t('paquetes', 'packages')}
-        {data?.plans?.length ? ` · ${data.plans.map((p: any) => p.reference).join(', ')}` : ''}
+      <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 12 }}>
+        {plans.length} {t('planes', 'plans')} · {totals.drivers} {t('conductores', 'drivers')} · {totals.packages} {t('paquetes', 'packages')}
       </div>
-      {rows.length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-500)', padding: '14px 0' }}>{t('No hay plan para esta fecha.', 'No plan for this date.')}</div>}
-      {rows.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--ink-500)' }}>
-                <th style={{ padding: '6px 8px' }}>{t('Conductor', 'Driver')}</th>
-                <th style={{ padding: '6px 8px' }}>{t('Plan', 'Plan')}</th>
-                <th style={{ padding: '6px 8px' }}>{t('Parroquia', 'Parish')}</th>
-                <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('Paquetes', 'Packages')}</th>
-                <th style={{ padding: '6px 8px' }}>{t('Estado', 'Status')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const firstOfDriver = i === 0 || rows[i - 1].driverId !== r.driverId;
-                return (
-                <tr key={i} style={{ borderTop: firstOfDriver ? '1px solid var(--line)' : '1px solid var(--surface-2)' }}>
-                  <td style={{ padding: '8px' }}>
-                    {firstOfDriver ? (<>
-                      <div style={{ fontWeight: 600 }}>{r.driver}{r.preassigned ? ' ★' : ''}</div>
-                      {r.vehicle && <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)' }}>{r.vehicle}</div>}
-                    </>) : <span style={{ color: 'var(--ink-300)' }}>↳</span>}
-                  </td>
-                  <td style={{ padding: '8px' }}><span className="mono" style={{ fontSize: 11.5 }}>{r.planReference}</span></td>
-                  <td style={{ padding: '8px' }}>{prettyParish(r.parish)}</td>
-                  <td style={{ padding: '8px', textAlign: 'right' }}>
-                    <span className="mono" style={{ fontWeight: 600 }}>{r.packages}</span>
-                    <div style={{ fontSize: 10, color: r.picked ? 'var(--brand-ink)' : 'var(--ink-400)' }}>
-                      {r.picked ? t('recogidos', 'picked up') : t('asignados', 'assigned')}
-                    </div>
-                  </td>
-                  <td style={{ padding: '8px' }}><span className={`badge ${dayStatusBadge[r.status] || 'badge-gray'}`}>{r.status}</span></td>
-                </tr>
-              );})}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {plans.length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-500)', padding: '14px 0' }}>{t('No hay planes para esta fecha.', 'No plans for this date.')}</div>}
+      <div style={{ display: 'grid', gap: 14 }}>
+        {plans.map((p) => (
+          <div key={p.id} style={{ border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
+            {/* plan header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--surface-2)' }}>
+              <span className="mono" style={{ fontWeight: 700, fontSize: 13 }}>{p.reference}</span>
+              {p.name && <span style={{ fontSize: 12, color: 'var(--ink-600)' }}>{p.name}</span>}
+              <span className={`badge ${planStatusBadge[p.status] || 'badge-gray'}`} style={{ marginLeft: 'auto' }}>{p.status === 'unfeasible' ? t('no viable', 'unfeasible') : p.status}</span>
+            </div>
+            {/* parish lines */}
+            {p.lines.map((l: any, li: number) => (
+              <div key={li} style={{ borderTop: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px' }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{prettyParish(l.parish)}</span>
+                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>{l.acceptedPackages}/{l.requiredPackages} {t('paq.', 'pkgs')}</span>
+                  <span className={`badge ${planLineBadge[l.status] || 'badge-gray'}`} style={{ marginLeft: 'auto' }}>{l.status === 'unfeasible' ? t('no viable', 'unfeasible') : l.status}</span>
+                </div>
+                {l.drivers.length === 0 ? (
+                  <div style={{ padding: '2px 12px 9px', fontSize: 12, color: 'var(--ink-400)' }}>{t('Sin conductores asignados', 'No drivers assigned')}</div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                    <tbody>
+                      {l.drivers.map((d: any, di: number) => (
+                        <tr key={di} style={{ borderTop: '1px solid var(--surface-2)' }}>
+                          <td style={{ padding: '6px 12px' }}>
+                            <span style={{ fontWeight: 500 }}>{d.driver}{d.preassigned ? ' ★' : ''}</span>
+                            {d.vehicle && <span className="mono" style={{ fontSize: 10, color: 'var(--ink-500)' }}> · {d.vehicle}</span>}
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <span className="mono" style={{ fontWeight: 600 }}>{d.packages}</span>
+                            <span style={{ fontSize: 10, color: d.picked ? 'var(--brand-ink)' : 'var(--ink-400)' }}> {d.picked ? t('recog.', 'picked') : t('asig.', 'assg')}</span>
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right' }}><span className={`badge ${dayStatusBadge[d.status] || 'badge-gray'}`}>{d.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

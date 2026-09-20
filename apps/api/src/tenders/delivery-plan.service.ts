@@ -504,58 +504,81 @@ export class DeliveryPlanService {
   }
 
   /**
-   * The day's operating picture for the live map: every driver on a plan for the
-   * given date, with their parish, package count and status. Package count is the
-   * actual packages picked up once the driver has checked in; otherwise the
-   * capacity-based number they were tendered.
+   * The day's operating picture for the live map, broken down PER PLAN. Each plan
+   * lists its parish lines and the drivers on each, with per-plan assigned
+   * packages and status. A driver's actual packages-picked (day-sheet) is shown
+   * only on plans they accepted, since pickup is a per-day figure.
    */
   async dayPlan(date?: string): Promise<any> {
     const day = date || new Date().toISOString().slice(0, 10);
     const plans = await this.plans.find({ where: { operationalDate: day }, relations: { lines: true } });
-    const rows: any[] = [];
+    // one day-sheet lookup per driver, cached
+    const ddCache = new Map<string, number | null>();
+    const pickedFor = async (driverId?: string): Promise<number | null> => {
+      if (!driverId) return null;
+      if (ddCache.has(driverId)) return ddCache.get(driverId)!;
+      const dd = await this.driverDays.findOne({ where: { driverId, operationalDate: day } });
+      const v = dd?.packagesPicked ?? null;
+      ddCache.set(driverId, v);
+      return v;
+    };
+
+    const driverIds = new Set<string>();
+    let assignments = 0;
+    let totalPackages = 0;
+
+    const planOut: any[] = [];
     for (const plan of plans) {
-      for (const line of plan.lines) {
+      const lines = [...plan.lines].sort((a, b) => (a.broadcastOrder ?? 99) - (b.broadcastOrder ?? 99) || a.parish.localeCompare(b.parish));
+      const linesOut: any[] = [];
+      for (const line of lines) {
         const tenders = await this.tenders.find({
           where: { line: { id: line.id } },
           relations: { driver: { user: true, vehicles: true } },
           order: { createdAt: 'ASC' },
         });
+        const drivers: any[] = [];
         for (const t of tenders) {
-          const dd = t.driver ? await this.driverDays.findOne({ where: { driverId: t.driver.id, operationalDate: day } }) : null;
-          const delivery = await this.deliveries.findOne({ where: { planTenderId: t.id } });
-          const picked = dd?.packagesPicked ?? null;
           const accepted = t.status === PlanTenderStatus.ACCEPTED || t.status === PlanTenderStatus.AUTO_ACCEPTED;
-          rows.push({
-            planReference: plan.reference,
+          const delivery = accepted ? await this.deliveries.findOne({ where: { planTenderId: t.id } }) : null;
+          // picked-up is a per-day total → only meaningful on a plan the driver accepted
+          const picked = accepted ? await pickedFor(t.driver?.id) : null;
+          if (t.driver?.id) driverIds.add(t.driver.id);
+          assignments++;
+          totalPackages += t.packages || 0;
+          drivers.push({
             driverId: t.driver?.id,
             driver: t.driver?.user?.fullName ?? '—',
-            parish: line.parish,
             vehicle: t.driver?.vehicles?.[0]?.type,
-            assignedPackages: t.packages,          // capacity-based tender size
-            packagesPicked: picked,                // actual, once checked in
+            assignedPackages: t.packages,
             packages: picked != null ? picked : t.packages,
             picked: picked != null,
-            tenderStatus: t.status,
-            deliveryStatus: delivery?.status ?? null,
+            preassigned: t.preassigned,
             status: accepted ? (delivery?.status ?? 'accepted') : t.status,
           });
         }
+        linesOut.push({
+          parish: line.parish,
+          requiredPackages: line.requiredPackages,
+          acceptedPackages: line.acceptedPackages,
+          status: line.status,
+          drivers,
+        });
       }
+      planOut.push({
+        id: plan.id,
+        reference: plan.reference,
+        name: plan.name,
+        status: plan.status,
+        operationalDate: plan.operationalDate,
+        lines: linesOut,
+      });
     }
-    // group each driver's assignments together (active drivers first), then by plan
-    const rank = (r: any) => (r.picked || ['en_route', 'picked_up', 'en_route_pickup'].includes(r.status) ? 0 : ['accepted', 'auto_accepted'].includes(r.tenderStatus) ? 1 : ['delivered'].includes(r.status) ? 2 : 3);
-    const drank = new Map<string, number>();
-    for (const r of rows) { const cur = drank.get(r.driverId); const v = rank(r); if (cur == null || v < cur) drank.set(r.driverId, v); }
-    rows.sort((a, b) =>
-      (drank.get(a.driverId)! - drank.get(b.driverId)!) ||
-      (a.driver || '').localeCompare(b.driver || '') ||
-      a.driverId?.localeCompare(b.driverId) ||
-      (a.planReference || '').localeCompare(b.planReference || ''),
-    );
+    planOut.sort((a, b) => (a.reference || '').localeCompare(b.reference || ''));
     return {
       date: day,
-      plans: plans.map((p) => ({ id: p.id, reference: p.reference, name: p.name, status: p.status })),
-      rows,
+      totals: { drivers: driverIds.size, assignments, packages: totalPackages },
+      plans: planOut,
     };
   }
 }
