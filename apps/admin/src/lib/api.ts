@@ -75,6 +75,7 @@ export const api = {
       documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
     }>(`/drivers/${id}/documents`),
   driverDayStats: (id: string) => request<any>(`/drivers/${id}/day-stats`),
+  driverPlans: (id: string) => request<any[]>(`/drivers/${id}/plans`),
   // document review queue (admin + security officer)
   documentReviews: () => request<any[]>('/document-reviews'),
   documentReviewCount: () => request<{ pending: number }>('/document-reviews/count'),

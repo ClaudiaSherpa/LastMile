@@ -217,7 +217,8 @@ export class DeliveryPlanService {
           this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName });
           this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate);
         }
-        line.status = eligible.length ? PlanLineStatus.BROADCASTING : (accepted >= line.requiredPackages ? PlanLineStatus.FILLED : PlanLineStatus.BROADCASTING);
+        // no one can cover the remainder -> the line is unfeasible
+        line.status = eligible.length ? PlanLineStatus.BROADCASTING : PlanLineStatus.UNFEASIBLE;
       } else {
         line.status = PlanLineStatus.FILLED;
       }
@@ -226,7 +227,9 @@ export class DeliveryPlanService {
       await this.lines.save(line);
     }
 
-    plan.status = DeliveryPlanStatus.BROADCASTING;
+    // if no parish can be served at all, the whole plan is unfeasible
+    const anyLive = ordered.some((l) => l.status === PlanLineStatus.BROADCASTING || l.status === PlanLineStatus.FILLED);
+    plan.status = anyLive ? DeliveryPlanStatus.BROADCASTING : DeliveryPlanStatus.UNFEASIBLE;
     await this.plans.save(plan);
     this.realtime.emitOps('plan.broadcast', { planId: plan.id, reference: plan.reference });
     this.logger.log(`plan ${plan.reference} broadcast: ${ordered.length} parishes (scarcest-first)`);
@@ -388,6 +391,27 @@ export class DeliveryPlanService {
       createdAt: plan.createdAt,
       lines: withCounts,
     };
+  }
+
+  /** Every delivery-plan tender assigned to a driver (for the Ops driver panel). */
+  async driverPlanHistory(driverId: string): Promise<any[]> {
+    const tenders = await this.tenders.find({
+      where: { driver: { id: driverId } },
+      relations: { line: { plan: true } },
+      order: { createdAt: 'DESC' },
+    });
+    return tenders.map((t) => ({
+      tenderId: t.id,
+      planReference: t.line?.plan?.reference,
+      planName: t.line?.plan?.name,
+      planStatus: t.line?.plan?.status,
+      operationalDate: t.line?.plan?.operationalDate ?? null,
+      parish: t.line?.parish,
+      packages: t.packages,
+      status: t.status,
+      preassigned: t.preassigned,
+      createdAt: t.createdAt,
+    }));
   }
 
   /** Eligible drivers for the pre-assign picker (security-cleared + eligible). */

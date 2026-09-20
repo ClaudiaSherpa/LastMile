@@ -48,6 +48,13 @@ export class DeliveryPlanController {
     return this.plans.dayPlan(date);
   }
 
+  /** All delivery plans assigned to a driver (Ops driver panel). */
+  @Get('drivers/:id/plans')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  driverPlans(@Param('id') id: string) {
+    return this.plans.driverPlanHistory(id);
+  }
+
   @Get('delivery-plans/:id')
   @Roles(Role.ADMIN, Role.DISPATCHER)
   get(@Param('id') id: string) {

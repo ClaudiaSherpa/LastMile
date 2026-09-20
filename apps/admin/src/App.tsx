@@ -185,7 +185,7 @@ function Messages() {
 }
 
 const CAP_TYPES: Array<[string, string]> = [['van', 'Van'], ['carro', 'Car'], ['moto', 'Moto'], ['camioneta', 'Pickup'], ['bici', 'Bike']];
-const planLineBadge: Record<string, string> = { pending: 'badge-gray', broadcasting: 'badge-blue', filled: 'badge-brand', cancelled: 'badge-red' };
+const planLineBadge: Record<string, string> = { pending: 'badge-gray', broadcasting: 'badge-blue', filled: 'badge-brand', cancelled: 'badge-red', unfeasible: 'badge-red' };
 
 function DeliveryPlans() {
   const { t, lang } = useI18n();
@@ -364,7 +364,7 @@ function DeliveryPlans() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="eyebrow">{sel.reference}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className={`badge ${sel.status === 'completed' ? 'badge-brand' : sel.status === 'broadcasting' ? 'badge-blue' : 'badge-gray'}`}>{sel.status}</span>
+              <span className={`badge ${sel.status === 'completed' ? 'badge-brand' : sel.status === 'broadcasting' ? 'badge-blue' : sel.status === 'unfeasible' || sel.status === 'cancelled' ? 'badge-red' : 'badge-gray'}`}>{sel.status === 'unfeasible' ? t('no viable', 'unfeasible') : sel.status}</span>
               <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
             </span>
           </div>
@@ -813,6 +813,7 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
   const [stats, setStats] = useState<{ assigned: number; delivered: number; pending: number; failed: number } | null>(null);
   const [docs, setDocs] = useState<Awaited<ReturnType<typeof api.driverDocuments>> | null>(null);
   const [dayStats, setDayStats] = useState<any>(null);
+  const [plans, setPlans] = useState<any[] | null>(null);
   const [err, setErr] = useState(false);
   const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -821,10 +822,11 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
 
   useEffect(() => {
     let live = true;
-    setStats(null); setDocs(null); setDayStats(null); setErr(false); setViewDoc(null);
+    setStats(null); setDocs(null); setDayStats(null); setPlans(null); setErr(false); setViewDoc(null);
     api.driverStats(driverId).then((s) => live && setStats(s)).catch(() => live && setErr(true));
     api.driverDocuments(driverId).then((d) => live && setDocs(d)).catch(() => {});
     api.driverDayStats(driverId).then((d) => live && setDayStats(d)).catch(() => {});
+    api.driverPlans(driverId).then((p) => live && setPlans(p)).catch(() => live && setPlans([]));
     return () => { live = false; };
   }, [driverId, reload]);
 
@@ -880,6 +882,28 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
             <StatTile label={t('Millaje total', 'Total mileage')} value={dayStats.mileage} accent="var(--blue-ink)" />
           </div>
         ))}
+
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Planes de entrega', 'Delivery plans')}</div>
+      {!plans && <div style={{ color: 'var(--ink-500)', fontSize: 13 }}>…</div>}
+      {plans && !plans.length && <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Sin planes asignados', 'No plans assigned')}</div>}
+      {plans && plans.length > 0 && (
+        <div style={{ display: 'grid', gap: 7 }}>
+          {plans.map((p) => {
+            const pb = (s: string) => s === 'accepted' || s === 'auto_accepted' ? 'badge-brand' : s === 'declined' ? 'badge-amber' : s === 'cancelled' || s === 'expired' ? 'badge-red' : 'badge-gray';
+            return (
+              <div key={p.tenderId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {prettyParish(p.parish)}{p.preassigned ? ' ★' : ''}
+                  </div>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)' }}>{p.planReference}{p.operationalDate ? ` · ${p.operationalDate}` : ''} · {p.packages} {t('paq.', 'pkgs')}</div>
+                </div>
+                <span className={`badge ${pb(p.status)}`}>{p.status === 'auto_accepted' ? t('auto', 'auto') : p.status}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Documentos', 'Documents')}</div>
       <div style={{ display: 'grid', gap: 8 }}>

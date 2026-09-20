@@ -124,6 +124,7 @@ export enum DeliveryPlanStatus {
   BROADCASTING = 'broadcasting',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  UNFEASIBLE = 'unfeasible', // no eligible drivers for any parish
 }
 
 export enum PlanLineStatus {
@@ -131,6 +132,7 @@ export enum PlanLineStatus {
   BROADCASTING = 'broadcasting',
   FILLED = 'filled',
   CANCELLED = 'cancelled',
+  UNFEASIBLE = 'unfeasible', // no eligible drivers to cover this parish
 }
 
 export enum PlanTenderStatus {
