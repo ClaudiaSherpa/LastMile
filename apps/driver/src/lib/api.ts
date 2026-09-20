@@ -103,6 +103,24 @@ export const api = {
   advanceDelivery: (id: string, status: string) => aj<any>(`/deliveries/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
   getProfile: () => aj<any>('/driver/profile'),
   updateProfile: (b: any) => aj<any>('/driver/profile', { method: 'PATCH', body: JSON.stringify(b) }),
+  // ── driver documents (re-upload / renew after onboarding) ──
+  myDocuments: () => aj<any[]>('/driver/documents'),
+  uploadMyDocument: async (docKey: string, file: File, dates?: { issueDate?: string; expiryDate?: string }) => {
+    const a = driverAuth.get();
+    const fd = new FormData();
+    fd.append('docKey', docKey);
+    if (dates?.issueDate) fd.append('issueDate', dates.issueDate);
+    if (dates?.expiryDate) fd.append('expiryDate', dates.expiryDate);
+    fd.append('file', file);
+    const res = await fetch(`${BASE}/driver/documents`, {
+      method: 'POST',
+      headers: a ? { Authorization: `Bearer ${a.accessToken}` } : {},
+      body: fd,
+    });
+    if (res.status === 401) { driverAuth.clear(); throw new Error('Session expired'); }
+    if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || `HTTP ${res.status}`); }
+    return res.json();
+  },
   getDay: (date?: string) => aj<any>(`/driver/day${date ? `?date=${date}` : ''}`),
   dayCheckIn: (b: any) => aj<any>('/driver/day/checkin', { method: 'POST', body: JSON.stringify(b) }),
   dayCheckOut: (b: any) => aj<any>('/driver/day/checkout', { method: 'POST', body: JSON.stringify(b) }),

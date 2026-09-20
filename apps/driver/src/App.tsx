@@ -715,6 +715,87 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
   );
 }
 
+// Re-upload / renew documents after onboarding. A new upload resets the
+// document to PENDING review by Ops.
+function DriverDocuments({ onBack }: { onBack: () => void }) {
+  const { t, lang } = useI18n();
+  const [docs, setDocs] = useState<any[] | null>(null);
+  const [exp, setExp] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
+
+  const load = () => api.myDocuments().then((d) => {
+    setDocs(d);
+    setExp(Object.fromEntries(d.filter((x: any) => x.expiryDate).map((x: any) => [x.key, x.expiryDate])));
+  }).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const onFile = async (d: any, file?: File) => {
+    if (!file) return;
+    setBusy(d.key);
+    try {
+      await api.uploadMyDocument(d.key, file, d.tracksExpiry && exp[d.key] ? { expiryDate: exp[d.key] } : undefined);
+      flash(t('Documento enviado a revisión', 'Document submitted for review'));
+      await load();
+    } catch (e: any) { flash(e.message); } finally { setBusy(''); }
+  };
+
+  const badge = (s: string | null) => {
+    const map: Record<string, [string, string, string]> = {
+      approved: ['badge-brand', 'Aprobado', 'Approved'],
+      pending: ['badge-amber', 'En revisión', 'Under review'],
+      rejected: ['badge-red', 'Rechazado', 'Rejected'],
+      expired: ['badge-red', 'Vencido', 'Expired'],
+    };
+    if (!s) return <span className="badge badge-gray">{t('Sin subir', 'Not uploaded')}</span>;
+    const m = map[s] || ['badge-gray', s, s];
+    return <span className={`badge ${m[0]}`}>{lang === 'es' ? m[1] : m[2]}</span>;
+  };
+
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 12px' }}>
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-700)' }}>‹</button>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', letterSpacing: '.08em' }}>PASAREX LM</span>
+          <LangToggle />
+        </div>
+        <div style={{ padding: '0 22px 8px' }}><h1 className="display" style={{ fontSize: 24, margin: 0 }}>{t('Mis documentos', 'My documents')}</h1></div>
+      </div>
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 20px' }}>
+        {!docs && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+        <div style={{ fontSize: 12.5, color: 'var(--ink-500)', marginBottom: 12 }}>
+          {t('Sube una versión nueva cuando renueves un documento. Volverá a revisión.', 'Upload a new version when you renew a document. It goes back for review.')}
+        </div>
+        {(docs || []).map((d) => (
+          <div key={d.key} className="card" style={{ padding: 14, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontWeight: 600, fontSize: 14.5 }}>{lang === 'es' ? d.nameEs : d.name}{d.required && <span style={{ color: 'var(--brand-ink)' }}> *</span>}</div>
+              {badge(d.status)}
+            </div>
+            {d.expiryDate && <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', marginTop: 3 }}>{t('Vence', 'Expires')} {d.expiryDate}</div>}
+            {d.status === 'rejected' && d.rejectionReason && (
+              <div style={{ fontSize: 12.5, color: 'var(--red-ink, #b3261e)', marginTop: 6 }}>{t('Motivo', 'Reason')}: {d.rejectionReason}</div>
+            )}
+            {d.tracksExpiry && (
+              <Field label={t('Fecha de vencimiento', 'Expiry date')}>
+                <input className="input mono" type="date" value={exp[d.key] || ''} onChange={(e) => setExp({ ...exp, [d.key]: e.target.value })} />
+              </Field>
+            )}
+            <label className="btn btn-primary btn-block" style={{ marginTop: 10, cursor: 'pointer', opacity: busy === d.key ? 0.6 : 1 }}>
+              {busy === d.key ? '…' : (d.hasFile ? t('Reemplazar archivo', 'Replace file') : t('Subir archivo', 'Upload file'))}
+              <input type="file" accept="image/*,application/pdf" hidden disabled={!!busy}
+                onChange={(e) => { onFile(d, e.target.files?.[0]); e.currentTarget.value = ''; }} />
+            </label>
+          </div>
+        ))}
+      </div>
+      <Toast msg={toast} />
+    </Phone>
+  );
+}
+
 function DriverHome({ onLogout }: { onLogout: () => void }) {
   const { t, lang } = useI18n();
   const [offers, setOffers] = useState<any[]>([]);
@@ -722,7 +803,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
   const [zones, setZones] = useState<Record<string, any>>({});
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState('');
-  const [screen, setScreen] = useState<'home' | 'profile'>('home');
+  const [screen, setScreen] = useState<'home' | 'profile' | 'documents'>('home');
   const sock = useRef<Socket | null>(null);
   const auth = driverAuth.get();
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
@@ -749,6 +830,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
   const advance = async (d: any) => { const ns = nextStatus(d.status); if (!ns) return; setBusy(d.id); try { await api.advanceDelivery(d.id, ns); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
 
   if (screen === 'profile') return <DriverProfileEdit onBack={() => setScreen('home')} />;
+  if (screen === 'documents') return <DriverDocuments onBack={() => setScreen('home')} />;
 
   return (
     <Phone>
@@ -756,6 +838,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 20px 12px' }}>
           <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button onClick={() => setScreen('documents')} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Documentos', 'Docs')}</button>
             <button onClick={() => setScreen('profile')} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Perfil', 'Profile')}</button>
             <LangToggle /><button onClick={onLogout} className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>{t('Salir', 'Sign out')}</button>
           </div>
