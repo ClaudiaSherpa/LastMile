@@ -67,6 +67,12 @@ export class DeliveryPlanController {
     return this.plans.broadcast(id);
   }
 
+  @Post('delivery-plans/:id/rebroadcast')
+  @Roles(Role.ADMIN, Role.DISPATCHER)
+  rebroadcast(@Param('id') id: string) {
+    return this.plans.rebroadcast(id);
+  }
+
   // ── driver side ──
   @Get('driver/plan-tenders')
   @Roles(Role.DRIVER)

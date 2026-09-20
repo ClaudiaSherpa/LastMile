@@ -133,6 +133,7 @@ export const api = {
   dayPlan: (date?: string) => request<any>(`/delivery-plans/day${date ? `?date=${date}` : ''}`),
   createPlan: (b: any) => request<any>('/delivery-plans', { method: 'POST', body: JSON.stringify(b) }),
   broadcastPlan: (id: string) => request<any>(`/delivery-plans/${id}/broadcast`, { method: 'POST' }),
+  rebroadcastPlan: (id: string) => request<any>(`/delivery-plans/${id}/rebroadcast`, { method: 'POST' }),
   // ── WhatsApp (Evolution) ──
   whatsappMessages: () => request<any[]>('/whatsapp/messages'),
   whatsappSend: (to: string, text: string, driverId?: string) =>

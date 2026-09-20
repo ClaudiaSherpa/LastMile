@@ -253,6 +253,7 @@ function DeliveryPlans() {
     } catch (e: any) { setNote(e.message); } finally { setBusy(''); }
   };
   const broadcast = async (id: string) => { setBusy(id); try { setSel(await api.broadcastPlan(id)); await loadPlans(); } catch (e: any) { setNote(e.message); } finally { setBusy(''); } };
+  const rebroadcast = async (id: string) => { setBusy(id); setNote(''); try { const p = await api.rebroadcastPlan(id); setSel(p); await loadPlans(); const offered = p.lines.reduce((s: number, l: any) => s + (l.tenders?.offered || 0), 0); setNote(t(`Re-difundido. ${offered} ofertas abiertas.`, `Re-broadcast. ${offered} open offers.`)); } catch (e: any) { setNote(e.message); } finally { setBusy(''); } };
 
   const pctOf = (l: any) => Math.min(100, Math.round((l.acceptedPackages / Math.max(1, l.requiredPackages)) * 100));
 
@@ -370,6 +371,11 @@ function DeliveryPlans() {
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: '4px 0 14px' }}>{sel.operationalDate ? `${sel.operationalDate} · ` : ''}{t('Recogida', 'Pickup')}: {sel.hubName} · {t('por escasez de conductores', 'by driver scarcity')}</div>
           {sel.status === 'draft' && <button className="btn btn-primary btn-block" style={{ marginBottom: 14 }} disabled={busy === sel.id} onClick={() => broadcast(sel.id)}>{t('Difundir plan', 'Broadcast plan')}</button>}
+          {(sel.status === 'broadcasting' || sel.status === 'unfeasible') && (
+            <button className="btn btn-ghost btn-block" style={{ marginBottom: 14 }} disabled={busy === sel.id} onClick={() => rebroadcast(sel.id)}>
+              {busy === sel.id ? '…' : `↻ ${t('Re-difundir a conductores elegibles', 'Re-broadcast to eligible drivers')}`}
+            </button>
+          )}
           <div style={{ display: 'grid', gap: 12 }}>
             {sel.lines.map((l: any) => {
               const recips = l.recipients || [];

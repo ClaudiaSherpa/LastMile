@@ -236,6 +236,75 @@ export class DeliveryPlanService {
     return this.get(plan.id);
   }
 
+  /**
+   * Re-broadcast a plan that is already broadcasting or unfeasible: re-evaluate
+   * eligibility and send offers to newly-eligible drivers on unfilled parishes,
+   * without re-spamming drivers who already have an offer or declined. Useful
+   * after fixing a driver's eligibility/zones/availability.
+   */
+  async rebroadcast(planId: string): Promise<any> {
+    const plan = await this.plans.findOne({ where: { id: planId }, relations: { lines: true } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    if (plan.status !== DeliveryPlanStatus.BROADCASTING && plan.status !== DeliveryPlanStatus.UNFEASIBLE) {
+      throw new BadRequestException(`Plan is ${plan.status}; only broadcasting or unfeasible plans can be re-broadcast`);
+    }
+
+    const cands = await this.candidates();
+    const byId = new Map(cands.map((c) => [c.id, c]));
+    const weekday = plan.operationalDate ? new Date(`${plan.operationalDate}T00:00:00Z`).getUTCDay() : null;
+
+    let newOffers = 0;
+    for (const line of plan.lines) {
+      if (line.status === PlanLineStatus.FILLED || line.status === PlanLineStatus.CANCELLED) continue;
+
+      line.eligibleCount = cands.filter((c) => this.eligibleForParish(c, line.parish, weekday)).length;
+
+      const existing = await this.tenders.find({ where: { line: { id: line.id } }, relations: { driver: true } });
+      // don't re-offer to anyone who already has a live/declined tender here
+      const seen = new Set(existing.filter((t) => t.status !== PlanTenderStatus.CANCELLED).map((t) => t.driver?.id));
+      let hasOpenOffers = existing.some((t) => t.status === PlanTenderStatus.OFFERED);
+
+      // pre-assigned drivers not yet tendered (e.g. they lacked a vehicle before) auto-accept now
+      for (const drvId of line.preassignedDriverIds ?? []) {
+        if (seen.has(drvId)) continue;
+        const c = byId.get(drvId);
+        const cap = this.capacityOf(plan, c?.vehicle);
+        if (!c || cap <= 0) continue;
+        await this.tenders.save(this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }));
+        line.acceptedPackages += cap;
+        seen.add(drvId);
+        this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true });
+        this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, true);
+      }
+
+      // offer the remainder to newly-eligible (non-pre-assigned, not-yet-tendered) drivers
+      const pre = new Set(line.preassignedDriverIds ?? []);
+      if (line.acceptedPackages < line.requiredPackages) {
+        const eligibleNew = cands.filter((c) => this.eligibleForParish(c, line.parish, weekday) && !seen.has(c.id) && !pre.has(c.id));
+        for (const c of eligibleNew) {
+          const cap = this.capacityOf(plan, c.vehicle);
+          if (cap <= 0) continue;
+          await this.tenders.save(this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, status: PlanTenderStatus.OFFERED }));
+          this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName });
+          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate);
+          newOffers++; hasOpenOffers = true;
+        }
+      }
+
+      line.status = line.acceptedPackages >= line.requiredPackages
+        ? PlanLineStatus.FILLED
+        : hasOpenOffers ? PlanLineStatus.BROADCASTING : PlanLineStatus.UNFEASIBLE;
+      await this.lines.save(line);
+    }
+
+    const anyLive = plan.lines.some((l) => l.status === PlanLineStatus.BROADCASTING || l.status === PlanLineStatus.FILLED);
+    plan.status = anyLive ? DeliveryPlanStatus.BROADCASTING : DeliveryPlanStatus.UNFEASIBLE;
+    await this.plans.save(plan);
+    this.realtime.emitOps('plan.broadcast', { planId: plan.id, reference: plan.reference, rebroadcast: true });
+    this.logger.log(`plan ${plan.reference} re-broadcast: ${newOffers} new offers`);
+    return this.get(plan.id);
+  }
+
   /** A driver accepts a tender for their parish (adds their package chunk). */
   async accept(tenderId: string, driverId: string): Promise<any> {
     const result = await this.tenders.manager.transaction(async (em) => {
