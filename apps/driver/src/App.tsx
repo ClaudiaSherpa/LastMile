@@ -796,6 +796,9 @@ function DriverDocuments({ onBack }: { onBack: () => void }) {
   );
 }
 
+// delivery states that count as "on a route" (started, not yet completed)
+const ROUTE_ACTIVE_STATUSES = ['en_route_pickup', 'picked_up', 'en_route'];
+
 function DriverHome({ onLogout }: { onLogout: () => void }) {
   const { t, lang } = useI18n();
   const [offers, setOffers] = useState<any[]>([]);
@@ -804,6 +807,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState('');
   const [screen, setScreen] = useState<'home' | 'profile' | 'documents'>('home');
+  const [geoDenied, setGeoDenied] = useState(false);
   const sock = useRef<Socket | null>(null);
   const auth = driverAuth.get();
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
@@ -824,6 +828,26 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
     s.on('delivery.updated', () => load());
     return () => { s.disconnect(); };
   }, []);
+
+  // ── location reporting: while a route is in progress, ping every 5 min ──
+  // "on a route" = the driver has a started, not-yet-completed delivery.
+  const activeDelivery = deliveries.find((d: any) => ROUTE_ACTIVE_STATUSES.includes(d.status));
+  const routeKey = activeDelivery?.id || '';
+  useEffect(() => {
+    if (!routeKey || !('geolocation' in navigator)) return;
+    let stopped = false;
+    const sendPing = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { if (!stopped) api.ping(pos.coords.latitude, pos.coords.longitude, routeKey).catch(() => {}); },
+        (err) => { if (err.code === err.PERMISSION_DENIED) setGeoDenied(true); },
+        { enableHighAccuracy: true, maximumAge: 60_000, timeout: 20_000 },
+      );
+    };
+    setGeoDenied(false);
+    sendPing(); // report immediately when the route starts
+    const iv = setInterval(sendPing, 5 * 60 * 1000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, [routeKey]);
 
   const accept = async (o: any) => { setBusy(o.id); try { const r = await api.acceptTender(o.id); flash(`${t('Aceptado', 'Accepted')} · ${r.packages} ${t('paquetes', 'pkgs')}`); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
   const decline = async (o: any) => { setBusy(o.id); try { await api.declineTender(o.id); await load(); } catch (e: any) { flash(e.message); } finally { setBusy(''); } };
@@ -849,6 +873,17 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
       <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 20px' }}>
+        {routeKey && !geoDenied && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--brand-tint)', color: 'var(--brand-ink)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, marginBottom: 12 }}>
+            <span className="live-dot" style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--brand)' }} />
+            {t('Compartiendo tu ubicación durante la ruta (cada 5 min).', 'Sharing your location during the route (every 5 min).')}
+          </div>
+        )}
+        {routeKey && geoDenied && (
+          <div style={{ background: 'var(--amber-tint, #fdf1d6)', color: 'var(--amber-ink, #7a5a00)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, marginBottom: 12 }}>
+            {t('Activa el permiso de ubicación para reportar tu ruta.', 'Enable location permission to report your route.')}
+          </div>
+        )}
         <DaySheet />
         <div className="eyebrow" style={{ margin: '6px 0 8px' }}>{t('Ofertas', 'Offers')} ({offers.length})</div>
         {!offers.length && <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>{t('No hay ofertas ahora.', 'No offers right now.')}</div>}

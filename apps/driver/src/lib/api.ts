@@ -101,6 +101,8 @@ export const api = {
   declineTender: (id: string) => aj<any>(`/plan-tenders/${id}/decline`, { method: 'POST' }),
   myDeliveries: () => aj<any[]>('/driver/deliveries'),
   advanceDelivery: (id: string, status: string) => aj<any>(`/deliveries/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+  ping: (lat: number, lng: number, deliveryId?: string) =>
+    aj<any>('/tracking/ping', { method: 'POST', body: JSON.stringify({ lat, lng, deliveryId }) }),
   getProfile: () => aj<any>('/driver/profile'),
   updateProfile: (b: any) => aj<any>('/driver/profile', { method: 'PATCH', body: JSON.stringify(b) }),
   // ── driver documents (re-upload / renew after onboarding) ──
