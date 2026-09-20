@@ -652,6 +652,16 @@ function DaySheet() {
         </div>
       </div>
       <div className="eyebrow" style={{ margin: '12px 0 8px', color: 'var(--brand-ink)' }}>{t('Llegada al depósito', 'Depot check-in')}</div>
+      {day?.plannedArrivalAt && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 8, padding: '7px 10px', borderRadius: 9, background: 'var(--surface-2)' }}>
+          <span>🕐 {t('Llegada planificada', 'Planned arrival')}: <b>{new Date(day.plannedArrivalAt).toLocaleTimeString('en-GB', { timeZone: 'America/Barbados', hour: '2-digit', minute: '2-digit', hour12: false })}</b></span>
+          {day.arrivalDeltaMin != null && (
+            <span className={`badge ${day.arrivalDeltaMin <= 0 ? 'badge-brand' : day.arrivalDeltaMin <= 10 ? 'badge-amber' : 'badge-red'}`} style={{ marginLeft: 'auto' }}>
+              {day.arrivalDeltaMin <= 0 ? t('a tiempo', 'on time') : `+${day.arrivalDeltaMin}m`}
+            </span>
+          )}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {cell(t('Hora de llegada', 'Arrival time'), timeIn('arrival'))}
         {cell(t('Paquetes recogidos', 'Packages picked'), numIn('picked'))}

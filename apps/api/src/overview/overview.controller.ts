@@ -1,6 +1,6 @@
-import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { DeliveryStatus, Role } from '@sherpa/shared';
 import { Roles } from '../auth/decorators';
 import {
@@ -178,6 +178,71 @@ export class OverviewController {
         mileage: r.startMileage != null && r.endMileage != null ? Math.round((r.endMileage - r.startMileage) * 10) / 10 : null,
         deliverySuccess: r.packagesPicked ? Math.round(((r.successfulDeliveries ?? 0) / r.packagesPicked) * 100) : null,
       })),
+    };
+  }
+
+  /**
+   * Operational dashboard for a period (day / week / month): fleet totals plus a
+   * per-driver breakdown, computed from the day-sheets in the window.
+   */
+  @Get('dashboard')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  async dashboard(@Query('period') period = 'week', @Query('date') date?: string) {
+    const end = date ? new Date(`${date}T00:00:00Z`) : new Date();
+    const endStr = end.toISOString().slice(0, 10);
+    const start = new Date(end);
+    if (period === 'day') { /* same day */ }
+    else if (period === 'month') start.setUTCDate(start.getUTCDate() - 29);
+    else { period = 'week'; start.setUTCDate(start.getUTCDate() - 6); }
+    const startStr = start.toISOString().slice(0, 10);
+
+    const rows = await this.driverDays.find({
+      where: { operationalDate: Between(startStr, endStr) },
+      relations: { driver: { user: true } },
+    });
+
+    const mileageOf = (r: any) => (r.startMileage != null && r.endMileage != null ? r.endMileage - r.startMileage : 0);
+    const onTime = (r: any) => (r.plannedArrivalAt && r.depotArrivalAt ? (new Date(r.depotArrivalAt) <= new Date(r.plannedArrivalAt)) : null);
+
+    // per-driver aggregation
+    const byDriver = new Map<string, any>();
+    for (const r of rows) {
+      const id = r.driverId;
+      let a = byDriver.get(id);
+      if (!a) { a = { driverId: id, name: r.driver?.user?.fullName ?? '—', days: 0, picked: 0, delivered: 0, returned: 0, mileage: 0, onTime: 0, withPlanned: 0 }; byDriver.set(id, a); }
+      a.days++;
+      a.picked += r.packagesPicked ?? 0;
+      a.delivered += r.successfulDeliveries ?? 0;
+      a.returned += r.packagesReturned ?? 0;
+      a.mileage += mileageOf(r);
+      const ot = onTime(r);
+      if (ot !== null) { a.withPlanned++; if (ot) a.onTime++; }
+    }
+    const drivers = [...byDriver.values()].map((a) => ({
+      ...a,
+      mileage: Math.round(a.mileage * 10) / 10,
+      successRate: a.picked ? Math.round((a.delivered / a.picked) * 100) : null,
+      onTimeRate: a.withPlanned ? Math.round((a.onTime / a.withPlanned) * 100) : null,
+    })).sort((x, y) => y.delivered - x.delivered);
+
+    const totals = drivers.reduce((s, d) => ({
+      picked: s.picked + d.picked, delivered: s.delivered + d.delivered, returned: s.returned + d.returned,
+      mileage: Math.round((s.mileage + d.mileage) * 10) / 10, onTime: s.onTime + d.onTime, withPlanned: s.withPlanned + d.withPlanned,
+    }), { picked: 0, delivered: 0, returned: 0, mileage: 0, onTime: 0, withPlanned: 0 });
+
+    return {
+      period, start: startStr, end: endStr,
+      totals: {
+        activeDrivers: drivers.length,
+        daySheets: rows.length,
+        packagesPicked: totals.picked,
+        packagesDelivered: totals.delivered,
+        packagesReturned: totals.returned,
+        successRate: totals.picked ? Math.round((totals.delivered / totals.picked) * 100) : null,
+        mileage: totals.mileage,
+        onTimeRate: totals.withPlanned ? Math.round((totals.onTime / totals.withPlanned) * 100) : null,
+      },
+      drivers,
     };
   }
 

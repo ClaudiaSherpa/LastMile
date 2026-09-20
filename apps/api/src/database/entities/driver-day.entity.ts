@@ -29,6 +29,10 @@ export class DriverDay {
   @Column({ type: 'date' })
   operationalDate: string;
 
+  // planned hub arrival for pickup (set by the dispatcher when planning)
+  @Column({ type: 'timestamptz', nullable: true })
+  plannedArrivalAt?: Date;
+
   // ── start of day (depot check-in) ──
   @Column({ type: 'timestamptz', nullable: true })
   depotArrivalAt?: Date;

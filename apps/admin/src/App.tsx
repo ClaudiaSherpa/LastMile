@@ -320,18 +320,40 @@ function DeliveryPlans() {
   };
 
   // download an Excel template listing active drivers, for the dispatcher to fill
-  // a Parish + Packages per driver, then re-upload to build a pre-assigned plan.
-  const downloadTemplate = () => {
-    const drivers = (elig.length ? elig : []).map((d) => ({
-      ID: d.id, Driver: d.name, Vehicle: d.vehicle || '', Plate: d.plate || '', Parish: '', Packages: '',
-    }));
-    const parishes = zones.map((z) => ({ Parish: lang === 'es' ? z.nameEs : z.nameEn, Slug: z.slug }));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(drivers.length ? drivers : [{ ID: '', Driver: '', Vehicle: '', Plate: '', Parish: '', Packages: '' }]);
-    ws['!cols'] = [{ wch: 38 }, { wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Plan');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(parishes), 'Parishes');
-    XLSX.writeFile(wb, `PasarEx-plan-template-${opDate || new Date().toISOString().slice(0, 10)}.xlsx`);
+  // a Parish (dropdown) + Packages + planned hub Arrival per driver, then
+  // re-upload to build a pre-assigned plan.
+  const downloadTemplate = async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Plan');
+    ws.columns = [
+      { header: 'ID', key: 'id', width: 38 },
+      { header: 'Driver', key: 'driver', width: 22 },
+      { header: 'Parish', key: 'parish', width: 20 },
+      { header: 'Packages', key: 'packages', width: 12 },
+      { header: 'Arrival (HH:MM)', key: 'arrival', width: 16 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    const drivers = elig.length ? elig : [];
+    drivers.forEach((d) => ws.addRow({ id: d.id, driver: d.name, parish: '', packages: '', arrival: '' }));
+
+    const names = zones.map((z) => (lang === 'es' ? z.nameEs : z.nameEn));
+    const lastRow = Math.max(drivers.length + 1, 200);
+    // parish dropdown (inline list ≤255 chars) on the Parish column (C)
+    for (let r = 2; r <= lastRow; r++) {
+      ws.getCell(`C${r}`).dataValidation = { type: 'list', allowBlank: true, formulae: [`"${names.join(',')}"`] };
+      ws.getCell(`E${r}`).numFmt = '@'; // arrival kept as text HH:MM
+    }
+    const wp = wb.addWorksheet('Parishes');
+    wp.columns = [{ header: 'Parish', key: 'name', width: 20 }, { header: 'Slug', key: 'slug', width: 16 }];
+    zones.forEach((z) => wp.addRow({ name: lang === 'es' ? z.nameEs : z.nameEn, slug: z.slug }));
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `PasarEx-plan-template-${opDate || new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click(); URL.revokeObjectURL(url);
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -347,21 +369,24 @@ function DeliveryPlans() {
       const isDriverTemplate = keys.some((k) => ['id', 'driverid', 'driver', 'conductor'].includes(k)) && keys.includes('parish');
 
       if (isDriverTemplate) {
-        // per-driver rows -> group by parish, pre-assign each driver with their quantity
-        const map: Record<string, { packages: number; preassigned: string[]; preassignedPackages: Record<string, number> }> = {};
+        // per-driver rows -> group by parish, pre-assign each driver with their quantity + arrival
+        const map: Record<string, { packages: number; preassigned: string[]; preassignedPackages: Record<string, number>; preassignedArrival: Record<string, string> }> = {};
         let assigned = 0;
+        const normTime = (v: any) => { const s = String(v ?? '').trim(); const m = s.match(/^(\d{1,2}):(\d{2})/); return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''; };
         for (const r of json) {
           const parish = zoneSlug(get(r, ['parish', 'zone', 'zona']));
           const pkg = parseInt(String(get(r, ['packages', 'quantity', 'qty', 'paquetes'])), 10) || 0;
           const ident = String(get(r, ['id', 'driverid']) || get(r, ['phone', 'celular']) || '').trim();
+          const arrival = normTime(get(r, ['arrival (hh:mm)', 'arrival', 'llegada', 'hora']));
           if (!parish || pkg <= 0 || !ident) continue;
-          const m = map[parish] || (map[parish] = { packages: 0, preassigned: [], preassignedPackages: {} });
+          const m = map[parish] || (map[parish] = { packages: 0, preassigned: [], preassignedPackages: {}, preassignedArrival: {} });
           m.packages += pkg;
           if (!m.preassigned.includes(ident)) m.preassigned.push(ident);
           m.preassignedPackages[ident] = (m.preassignedPackages[ident] || 0) + pkg;
+          if (arrival) m.preassignedArrival[ident] = arrival;
           assigned++;
         }
-        const parsed = Object.entries(map).map(([parish, m]) => ({ parish, packages: m.packages, preassigned: m.preassigned, preassignedPackages: m.preassignedPackages }));
+        const parsed = Object.entries(map).map(([parish, m]) => ({ parish, packages: m.packages, preassigned: m.preassigned, preassignedPackages: m.preassignedPackages, preassignedArrival: m.preassignedArrival }));
         if (!parsed.length) { setNote(t('Ningún conductor con parroquia y paquetes. Llena Parish y Packages.', 'No driver rows with a parish + packages. Fill Parish and Packages.')); return; }
         setRows(parsed);
         setNote(t(`${assigned} conductores pre-asignados en ${parsed.length} parroquias.`, `${assigned} drivers pre-assigned across ${parsed.length} parishes.`));
@@ -388,6 +413,7 @@ function DeliveryPlans() {
       parish: r.parish, packages: Number(r.packages),
       preassigned: Array.isArray(r.preassigned) ? r.preassigned : String(r.preassigned || '').split(/[;,]/).map((s: string) => s.trim()).filter(Boolean),
       ...(r.preassignedPackages ? { preassignedPackages: r.preassignedPackages } : {}),
+      ...(r.preassignedArrival ? { preassignedArrival: r.preassignedArrival } : {}),
     }));
     if (!lines.length) { setNote(t('Agrega al menos una parroquia con paquetes.', 'Add at least one parish with packages.')); return; }
     setBusy('create'); setNote('');
@@ -676,24 +702,84 @@ function Kpi({ label, value, sub }: { label: string; value: any; sub?: string })
 function Dashboard() {
   const { t } = useI18n();
   const [o, setO] = useState<any>(null);
+  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week');
+  const [d, setD] = useState<any>(null);
   useEffect(() => { api.overview().then(setO).catch(() => {}); }, []);
-  if (!o) return <div style={{ color: 'var(--ink-500)' }}>…</div>;
+  useEffect(() => { setD(null); api.dashboard(period).then(setD).catch(() => setD(null)); }, [period]);
+  const tot = d?.totals;
+
+  const pTab = (p: 'day' | 'week' | 'month', label: string) => (
+    <button onClick={() => setPeriod(p)} style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, background: period === p ? 'var(--brand)' : 'var(--surface-2)', color: period === p ? '#063' : 'var(--ink-600)' }}>{label}</button>
+  );
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16 }}>
-        <Kpi label={t('Conductores', 'Drivers')} value={o.drivers} sub={`${o.driversMoving} ${t('en movimiento', 'moving')}`} />
-        <Kpi label={t('Solicitudes', 'Applications')} value={o.applications} sub={t('en cola', 'in queue')} />
-        <Kpi label={t('Fletes', 'Freight')} value={o.freights} sub={t('disponibles', 'available')} />
-        <Kpi label={t('Etapas de aprobación', 'Approval stages')} value={o.config.approvalStages} sub={t('configurables', 'configurable')} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {pTab('day', t('Hoy', 'Today'))}
+        {pTab('week', t('7 días', '7 days'))}
+        {pTab('month', t('30 días', '30 days'))}
+        {d && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{d.start} → {d.end}</span>}
       </div>
-      <div className="card" style={{ padding: 18 }}>
-        <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Configuración (editable, no hardcode)', 'Configuration (editable, not hardcoded)')}</div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <span className="badge badge-gray">{o.config.documentTypes} {t('tipos de documento', 'document types')}</span>
-          <span className="badge badge-gray">{o.config.operatingAreas} {t('zonas operativas', 'operating areas')}</span>
-          <span className="badge badge-gray">{o.config.approvalStages} {t('etapas', 'stages')}</span>
+
+      {!d && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+      {tot && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14 }}>
+          <Kpi label={t('Conductores activos', 'Active drivers')} value={tot.activeDrivers} sub={`${tot.daySheets} ${t('hojas', 'day sheets')}`} />
+          <Kpi label={t('Paquetes entregados', 'Packages delivered')} value={tot.packagesDelivered} sub={`${tot.packagesPicked} ${t('recogidos', 'picked')}`} />
+          <Kpi label={t('Éxito de entrega', 'Delivery success')} value={tot.successRate != null ? `${tot.successRate}%` : '—'} sub={`${tot.packagesReturned} ${t('devueltos', 'returned')}`} />
+          <Kpi label={t('Puntualidad', 'On-time pickup')} value={tot.onTimeRate != null ? `${tot.onTimeRate}%` : '—'} sub={t('llegada al hub', 'hub arrival')} />
+          <Kpi label={t('Millaje', 'Mileage')} value={`${tot.mileage} km`} sub={t('total del período', 'period total')} />
         </div>
-      </div>
+      )}
+
+      {d && d.drivers && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="eyebrow" style={{ padding: '14px 16px 6px' }}>{t('Métricas por conductor', 'Metrics by driver')}</div>
+          {!d.drivers.length && <div style={{ padding: '10px 16px 18px', color: 'var(--ink-500)', fontSize: 13 }}>{t('Sin actividad en el período.', 'No activity in this period.')}</div>}
+          {d.drivers.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
+                    <th style={{ padding: '8px 16px' }}>{t('Conductor', 'Driver')}</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>{t('Días', 'Days')}</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>{t('Entregados', 'Delivered')}</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>{t('Devueltos', 'Returned')}</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>{t('Éxito', 'Success')}</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>{t('Puntual', 'On-time')}</th>
+                    <th style={{ padding: '8px 16px', textAlign: 'right' }}>{t('Millaje', 'Mileage')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.drivers.map((r: any) => (
+                    <tr key={r.driverId} style={{ borderTop: '1px solid var(--line)' }}>
+                      <td style={{ padding: '9px 16px', fontWeight: 600 }}>{r.name}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right' }} className="mono">{r.days}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right' }} className="mono">{r.delivered}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right' }} className="mono">{r.returned}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right' }} className="mono">{r.successRate != null ? `${r.successRate}%` : '—'}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right' }} className="mono">{r.onTimeRate != null ? `${r.onTimeRate}%` : '—'}</td>
+                      <td style={{ padding: '9px 16px', textAlign: 'right' }} className="mono">{r.mileage} km</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {o && (
+        <div className="card" style={{ padding: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Estado general', 'Overview')}</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <span className="badge badge-gray">{o.drivers} {t('conductores', 'drivers')}</span>
+            <span className="badge badge-gray">{o.driversMoving} {t('en movimiento', 'moving')}</span>
+            <span className="badge badge-gray">{o.applications} {t('solicitudes', 'applications')}</span>
+            <span className="badge badge-gray">{o.config.operatingAreas} {t('zonas', 'zones')}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1422,6 +1508,12 @@ function DayPlanTable() {
                           <td style={{ padding: '6px 12px' }}>
                             <span style={{ fontWeight: 500 }}>{d.driver}{d.preassigned ? ' ★' : ''}</span>
                             {d.vehicle && <span className="mono" style={{ fontSize: 10, color: 'var(--ink-500)' }}> · {d.vehicle}</span>}
+                            {(d.plannedArrival || d.actualArrival) && (
+                              <div className="mono" style={{ fontSize: 10, color: d.arrivalDeltaMin != null && d.arrivalDeltaMin > 10 ? 'var(--red-ink, #d9342b)' : 'var(--ink-500)' }}>
+                                🕐 {d.plannedArrival || '—'}{d.actualArrival ? ` → ${d.actualArrival}` : ''}
+                                {d.arrivalDeltaMin != null ? ` (${d.arrivalDeltaMin > 0 ? '+' : ''}${d.arrivalDeltaMin}m)` : ''}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <span className="mono" style={{ fontWeight: 600 }}>{d.packages}</span>

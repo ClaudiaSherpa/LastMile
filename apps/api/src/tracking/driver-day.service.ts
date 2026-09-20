@@ -83,11 +83,18 @@ export class DriverDayService {
     const mileage = d.startMileage != null && d.endMileage != null ? Math.round((d.endMileage - d.startMileage) * 10) / 10 : null;
     // route status derived from the day-sheet timestamps
     const status = d.depotReturnAt ? 'completed' : d.depotDepartureAt ? 'departed' : d.depotArrivalAt ? 'checked_in' : 'not_started';
+    // punctuality: minutes late (negative = early) vs the planned hub arrival
+    let arrivalDeltaMin: number | null = null;
+    if (d.plannedArrivalAt && d.depotArrivalAt) {
+      arrivalDeltaMin = Math.round((new Date(d.depotArrivalAt).getTime() - new Date(d.plannedArrivalAt).getTime()) / 60000);
+    }
     return {
       id: d.id,
       operationalDate: d.operationalDate,
       exists: true,
       status,
+      plannedArrivalAt: d.plannedArrivalAt,
+      arrivalDeltaMin,
       depotArrivalAt: d.depotArrivalAt,
       packagesPicked: d.packagesPicked,
       depotDepartureAt: d.depotDepartureAt,

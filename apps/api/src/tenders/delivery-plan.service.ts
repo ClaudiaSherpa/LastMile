@@ -34,6 +34,7 @@ export interface PlanLineInput {
   packages: number;
   preassigned?: string[]; // driver ids, emails or phones
   preassignedPackages?: Record<string, number>; // driverId -> packages (from the Excel template)
+  preassignedArrival?: Record<string, string>; // driverId -> planned hub arrival "HH:MM"
 }
 export interface CreatePlanInput {
   name?: string;
@@ -148,6 +149,22 @@ export class DeliveryPlanService {
           status: PlanLineStatus.PENDING,
         }),
       );
+
+      // seed each pre-assigned driver's day-sheet with the planned hub arrival
+      if (plan.operationalDate && l.preassignedArrival) {
+        for (const id of preassignedDriverIds) {
+          const hhmm = l.preassignedArrival[id];
+          if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) continue;
+          // HH:MM is Barbados wall-clock (AST, UTC-4, no DST)
+          const planned = new Date(`${plan.operationalDate}T${hhmm.padStart(5, '0')}:00-04:00`);
+          if (isNaN(planned.getTime())) continue;
+          let dd = await this.driverDays.findOne({ where: { driverId: id, operationalDate: plan.operationalDate } });
+          if (!dd) dd = this.driverDays.create({ driverId: id, operationalDate: plan.operationalDate });
+          // keep the earliest planned arrival if the driver is on multiple plans
+          if (!dd.plannedArrivalAt || planned < new Date(dd.plannedArrivalAt)) dd.plannedArrivalAt = planned;
+          await this.driverDays.save(dd);
+        }
+      }
     }
     return this.get(plan.id);
   }
@@ -513,15 +530,16 @@ export class DeliveryPlanService {
     const day = date || new Date().toISOString().slice(0, 10);
     const plans = await this.plans.find({ where: { operationalDate: day }, relations: { lines: true } });
     // one day-sheet lookup per driver, cached
-    const ddCache = new Map<string, number | null>();
-    const pickedFor = async (driverId?: string): Promise<number | null> => {
+    const ddCache = new Map<string, DriverDay | null>();
+    const dayFor = async (driverId?: string): Promise<DriverDay | null> => {
       if (!driverId) return null;
       if (ddCache.has(driverId)) return ddCache.get(driverId)!;
       const dd = await this.driverDays.findOne({ where: { driverId, operationalDate: day } });
-      const v = dd?.packagesPicked ?? null;
-      ddCache.set(driverId, v);
-      return v;
+      ddCache.set(driverId, dd ?? null);
+      return dd ?? null;
     };
+    // display times in Barbados wall-clock (AST, UTC-4)
+    const timeStr = (d?: Date | null) => (d ? new Date(d).toLocaleTimeString('en-GB', { timeZone: 'America/Barbados', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
 
     const driverIds = new Set<string>();
     let assignments = 0;
@@ -541,8 +559,12 @@ export class DeliveryPlanService {
         for (const t of tenders) {
           const accepted = t.status === PlanTenderStatus.ACCEPTED || t.status === PlanTenderStatus.AUTO_ACCEPTED;
           const delivery = accepted ? await this.deliveries.findOne({ where: { planTenderId: t.id } }) : null;
+          const dd = await dayFor(t.driver?.id);
           // picked-up is a per-day total → only meaningful on a plan the driver accepted
-          const picked = accepted ? await pickedFor(t.driver?.id) : null;
+          const picked = accepted ? (dd?.packagesPicked ?? null) : null;
+          const deltaMin = dd?.plannedArrivalAt && dd?.depotArrivalAt
+            ? Math.round((new Date(dd.depotArrivalAt).getTime() - new Date(dd.plannedArrivalAt).getTime()) / 60000)
+            : null;
           if (t.driver?.id) driverIds.add(t.driver.id);
           assignments++;
           totalPackages += t.packages || 0;
@@ -554,6 +576,9 @@ export class DeliveryPlanService {
             packages: picked != null ? picked : t.packages,
             picked: picked != null,
             preassigned: t.preassigned,
+            plannedArrival: timeStr(dd?.plannedArrivalAt),
+            actualArrival: timeStr(dd?.depotArrivalAt),
+            arrivalDeltaMin: deltaMin,
             status: accepted ? (delivery?.status ?? 'accepted') : t.status,
           });
         }
