@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as XLSX from 'xlsx';
 import { api, auth } from './lib/api';
 import { I18nCtx, Lang, useI18n } from './lib/i18n';
@@ -454,11 +454,11 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
         </div>
         <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
           {tab === 'dashboard' && <Dashboard />}
-          {tab === 'map' && <LiveMap />}
+          {tab === 'map' && <LiveMap role={me?.role} />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'compliance' && <Compliance />}
           {tab === 'plans' && <DeliveryPlans />}
-          {tab === 'drivers' && <Drivers />}
+          {tab === 'drivers' && <Drivers role={me?.role} />}
           {tab === 'messages' && <Messages />}
           {tab === 'config' && <Config />}
         </div>
@@ -764,13 +764,16 @@ function StatTile({ label, value, accent }: { label: string; value: number | str
   );
 }
 
-function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; name?: string; sub?: string; onClose: () => void }) {
+function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { driverId: string; name?: string; sub?: string; role?: string; onClose: () => void; onSaved?: () => void }) {
   const { t } = useI18n();
   const [stats, setStats] = useState<{ assigned: number; delivered: number; pending: number; failed: number } | null>(null);
   const [docs, setDocs] = useState<Awaited<ReturnType<typeof api.driverDocuments>> | null>(null);
   const [dayStats, setDayStats] = useState<any>(null);
   const [err, setErr] = useState(false);
   const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [reload, setReload] = useState(0);
+  const canEdit = role === 'admin' || role === 'security_officer';
 
   useEffect(() => {
     let live = true;
@@ -779,7 +782,7 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
     api.driverDocuments(driverId).then((d) => live && setDocs(d)).catch(() => {});
     api.driverDayStats(driverId).then((d) => live && setDayStats(d)).catch(() => {});
     return () => { live = false; };
-  }, [driverId]);
+  }, [driverId, reload]);
 
   const docBadge = (s: string) => s === 'approved' ? 'badge-brand' : s === 'rejected' || s === 'expired' ? 'badge-red' : 'badge-gray';
 
@@ -791,6 +794,11 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
       </div>
       {name && <div style={{ fontWeight: 600, fontSize: 15.5, marginTop: 6 }}>{name}</div>}
       {sub && <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>{sub}</div>}
+      {canEdit && (
+        <button className="btn btn-ghost" style={{ marginTop: 8, padding: '5px 12px', fontSize: 12.5 }} onClick={() => setEditOpen(true)}>
+          ✎ {t('Editar datos', 'Edit driver')}
+        </button>
+      )}
       {docs?.driver?.phone && (
         <div style={{ marginTop: 6, fontSize: 13 }}>
           <span style={{ color: 'var(--ink-500)' }}>{t('Teléfono', 'Phone')}: </span>
@@ -860,7 +868,143 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
       )}
 
       {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
+      {editOpen && (
+        <DriverEditModal driverId={driverId} onClose={() => setEditOpen(false)}
+          onSaved={() => { setEditOpen(false); setReload((x) => x + 1); onSaved?.(); }} />
+      )}
     </div>
+  );
+}
+
+const VEHICLE_TYPES = ['moto', 'carro', 'van', 'camioneta', 'bici'];
+const DRIVER_STATUSES = ['idle', 'enroute', 'delivering', 'offduty'];
+const WEEKDAYS: [number, string, string][] = [
+  [0, 'Sun', 'Dom'], [1, 'Mon', 'Lun'], [2, 'Tue', 'Mar'], [3, 'Wed', 'Mié'],
+  [4, 'Thu', 'Jue'], [5, 'Fri', 'Vie'], [6, 'Sat', 'Sáb'],
+];
+const BLOCKS: [string, string, string][] = [
+  ['madrugada', 'Early', 'Madrugada'], ['manana', 'Morning', 'Mañana'],
+  ['tarde', 'Afternoon', 'Tarde'], ['noche', 'Night', 'Noche'],
+];
+
+// Ops driver-record editor (admin + security officer). Loads the full record,
+// edits contact/vehicle/availability/identity and security flags, then saves.
+function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onClose: () => void; onSaved: () => void }) {
+  const { t, lang } = useI18n();
+  const [f, setF] = useState<any>(null);
+  const [zones, setZones] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api.getDriver(driverId).then((d) => { if (live) setF({ ...d, vehicle: d.vehicle || {}, zones: d.zones || [], days: d.days || [], blocks: d.blocks || [] }); }).catch((e) => setErr(e.message));
+    api.zones().then((z) => live && setZones(z)).catch(() => {});
+    return () => { live = false; };
+  }, [driverId]);
+
+  const setV = (k: string, v: any) => setF((p: any) => ({ ...p, vehicle: { ...p.vehicle, [k]: v } }));
+  const toggle = (key: 'zones' | 'days' | 'blocks', v: any) => setF((p: any) => {
+    const arr = p[key] || [];
+    return { ...p, [key]: arr.includes(v) ? arr.filter((x: any) => x !== v) : [...arr, v] };
+  });
+
+  const save = async () => {
+    setSaving(true); setErr(null);
+    try {
+      await api.updateDriver(driverId, {
+        name: f.name, email: f.email, phone: f.phone, address: f.address, cedula: f.cedula,
+        vehicle: f.vehicle, zones: f.zones, days: f.days, blocks: f.blocks,
+        securityCleared: f.securityCleared, eligible: f.eligible, status: f.status,
+      });
+      onSaved();
+    } catch (e: any) { setErr(e.message); } finally { setSaving(false); }
+  };
+
+  const chip = (on: boolean, label: string, onClick: () => void, key: string) => (
+    <button key={key} onClick={onClick} className={`badge ${on ? 'badge-brand' : 'badge-gray'}`}
+      style={{ cursor: 'pointer', border: 'none' }}>{label}</button>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'grid', placeItems: 'center', zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: 460, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span className="eyebrow">{t('Editar conductor', 'Edit driver')}</span>
+          <button onClick={onClose} className="btn btn-ghost" style={{ padding: '4px 10px' }}>✕</button>
+        </div>
+        {!f && !err && <div style={{ color: 'var(--ink-500)', padding: 20 }}>…</div>}
+        {f && (<>
+          <EField label={t('Nombre completo', 'Full name')}><input className="input" value={f.name || ''} onChange={(e) => setF({ ...f, name: e.target.value })} /></EField>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <EField label={t('Celular (usuario)', 'Mobile (username)')}><input className="input mono" value={f.phone || ''} onChange={(e) => setF({ ...f, phone: e.target.value })} /></EField>
+            <EField label={t('Correo', 'Email')}><input className="input" value={f.email || ''} onChange={(e) => setF({ ...f, email: e.target.value })} /></EField>
+          </div>
+          <EField label={t('Documento nacional', 'National ID')}><input className="input mono" value={f.cedula || ''} onChange={(e) => setF({ ...f, cedula: e.target.value })} /></EField>
+          <EField label={t('Dirección', 'Address')}><input className="input" value={f.address || ''} onChange={(e) => setF({ ...f, address: e.target.value })} /></EField>
+
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Vehículo', 'Vehicle')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <EField label={t('Tipo', 'Type')}>
+              <select className="input" value={f.vehicle?.type || ''} onChange={(e) => setV('type', e.target.value)}>
+                <option value="">—</option>
+                {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </EField>
+            <EField label={t('Placa', 'Plate')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={f.vehicle?.plate || ''} onChange={(e) => setV('plate', e.target.value)} /></EField>
+            <EField label={t('Marca', 'Make')}><input className="input" value={f.vehicle?.brand || ''} onChange={(e) => setV('brand', e.target.value)} /></EField>
+            <EField label={t('Modelo', 'Model')}><input className="input" value={f.vehicle?.model || ''} onChange={(e) => setV('model', e.target.value)} /></EField>
+            <EField label={t('Año', 'Year')}><input className="input mono" value={f.vehicle?.year || ''} onChange={(e) => setV('year', e.target.value)} /></EField>
+            <EField label={t('Color', 'Color')}><input className="input" value={f.vehicle?.color || ''} onChange={(e) => setV('color', e.target.value)} /></EField>
+          </div>
+
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Zonas de operación', 'Operating zones')}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {zones.map((z) => chip((f.zones || []).includes(z.slug), lang === 'es' ? z.nameEs : z.nameEn, () => toggle('zones', z.slug), z.slug))}
+          </div>
+
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Días disponibles', 'Available days')}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {WEEKDAYS.map(([n, en, es]) => chip((f.days || []).includes(n), lang === 'es' ? es : en, () => toggle('days', n), String(n)))}
+          </div>
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Franjas horarias', 'Time blocks')}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {BLOCKS.map(([id, en, es]) => chip((f.blocks || []).includes(id), lang === 'es' ? es : en, () => toggle('blocks', id), id))}
+          </div>
+
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Estado y seguridad', 'Status & security')}</div>
+          <EField label={t('Estado', 'Status')}>
+            <select className="input" value={f.status || ''} onChange={(e) => setF({ ...f, status: e.target.value })}>
+              {DRIVER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </EField>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginTop: 8 }}>
+            <input type="checkbox" checked={!!f.securityCleared} onChange={(e) => setF({ ...f, securityCleared: e.target.checked })} />
+            {t('Verificación de seguridad aprobada', 'Security cleared')}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginTop: 6 }}>
+            <input type="checkbox" checked={!!f.eligible} onChange={(e) => setF({ ...f, eligible: e.target.checked })} />
+            {t('Elegible para recibir entregas', 'Eligible for deliveries')}
+          </label>
+
+          {err && <div className="badge badge-red" style={{ marginTop: 12 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>{t('Cancelar', 'Cancel')}</button>
+            <button className="btn btn-primary" style={{ flex: 1 }} disabled={saving} onClick={save}>{saving ? '…' : t('Guardar', 'Save')}</button>
+          </div>
+        </>)}
+        {err && !f && <div className="badge badge-red" style={{ marginTop: 12 }}>{err}</div>}
+      </div>
+    </div>
+  );
+}
+
+function EField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label style={{ display: 'block', marginTop: 10 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-500)', marginBottom: 4 }}>{label}</div>
+      {children}
+    </label>
   );
 }
 
@@ -890,7 +1034,7 @@ function RoadsLayer() {
   );
 }
 
-function LiveMap() {
+function LiveMap({ role }: { role?: string }) {
   const { t } = useI18n();
   const [drivers, setDrivers] = useState<Record<string, any>>({});
   const [selected, setSelected] = useState<string | null>(null);
@@ -942,18 +1086,19 @@ function LiveMap() {
         {selected && drivers[selected] && (
           <DriverStatsPanel driverId={selected} name={drivers[selected].name}
             sub={[drivers[selected].vehicle, drivers[selected].tier].filter(Boolean).join(' · ')}
-            onClose={() => setSelected(null)} />
+            role={role} onClose={() => setSelected(null)} />
         )}
       </div>
     </div>
   );
 }
 
-function Drivers() {
+function Drivers({ role }: { role?: string }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
   const [sel, setSel] = useState<any>(null);
-  useEffect(() => { api.drivers().then(setRows).catch(() => {}); }, []);
+  const loadDrivers = useCallback(() => { api.drivers().then(setRows).catch(() => {}); }, []);
+  useEffect(() => { loadDrivers(); }, [loadDrivers]);
   return (
     <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       <div className="card" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -991,7 +1136,7 @@ function Drivers() {
       {sel && (
         <DriverStatsPanel driverId={sel.id} name={sel.name}
           sub={[sel.plate, sel.vehicle, sel.tier].filter(Boolean).join(' · ')}
-          onClose={() => setSel(null)} />
+          role={role} onClose={() => setSel(null)} onSaved={loadDrivers} />
       )}
     </div>
   );

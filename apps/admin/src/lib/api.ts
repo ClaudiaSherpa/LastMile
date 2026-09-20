@@ -75,6 +75,10 @@ export const api = {
       documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
     }>(`/drivers/${id}/documents`),
   driverDayStats: (id: string) => request<any>(`/drivers/${id}/day-stats`),
+  // Ops driver record management (admin + security officer)
+  getDriver: (id: string) => request<any>(`/drivers/${id}`),
+  updateDriver: (id: string, body: Record<string, any>) =>
+    request<any>(`/drivers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   applications: () => request<any[]>('/applications'),
   // approvals
   queue: () => request<any[]>('/approvals/queue'),

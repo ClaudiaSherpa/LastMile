@@ -643,7 +643,7 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
   const save = async () => {
     setBusy(true);
     try {
-      const r = await api.updateProfile({ vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones, address: p.address });
+      const r = await api.updateProfile({ name: p.name, phone: p.phone, email: p.email, vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones, address: p.address });
       setP({ ...r, vehicle: r.vehicle || {}, days: r.days || [], blocks: r.blocks || [], zones: r.zones || [] });
       setToast(t('Guardado', 'Saved')); setTimeout(() => setToast(null), 2200);
     } catch (e: any) { setToast(e.message); setTimeout(() => setToast(null), 3000); } finally { setBusy(false); }
@@ -662,6 +662,12 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
       <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 20px' }}>
         {!p && <div style={{ color: 'var(--ink-500)' }}>…</div>}
         {p && (<>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Datos personales', 'Personal details')}</div>
+          <Field label={t('Nombre completo', 'Full name')}><input className="input" value={p.name || ''} onChange={(e) => setP({ ...p, name: e.target.value })} /></Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label={t('Celular (usuario)', 'Mobile (username)')}><input className="input mono" value={p.phone || ''} onChange={(e) => setP({ ...p, phone: e.target.value })} /></Field>
+            <Field label={t('Correo', 'Email')}><input className="input" value={p.email || ''} onChange={(e) => setP({ ...p, email: e.target.value })} /></Field>
+          </div>
           <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Dirección', 'Address')}</div>
           <Field label={t('Dirección (según factura de servicios)', 'Address (as on your utility bill)')}><input className="input" value={p.address || ''} onChange={(e) => setP({ ...p, address: e.target.value })} placeholder={t('Calle, ciudad, parroquia', 'Street, city, parish')} /></Field>
           <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Vehículo', 'Vehicle')}</div>

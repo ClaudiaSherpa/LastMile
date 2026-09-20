@@ -1,15 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { VEHICLE_CAPACITY_KG, VehicleType } from '@sherpa/shared';
-import { AvailabilitySlot, DriverProfile, OperatingArea, Vehicle } from '../database/entities';
+import { DriverStatus, VEHICLE_CAPACITY_KG, VehicleType } from '@sherpa/shared';
+import { AvailabilitySlot, DriverProfile, OperatingArea, User, Vehicle } from '../database/entities';
 
 export interface UpdateProfileInput {
+  // personal / contact
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  cedula?: string; // admin-only (identity)
   vehicle?: { type?: VehicleType; plate?: string; brand?: string; model?: string; year?: number | string; color?: string };
   zones?: string[]; // operating-area slugs
   days?: number[]; // weekday 0=Sun..6=Sat
   blocks?: string[]; // madrugada|manana|tarde|noche
-  address?: string;
+  // security / eligibility (admin + security officer only)
+  securityCleared?: boolean;
+  eligible?: boolean;
+  status?: DriverStatus;
 }
 
 @Injectable()
@@ -19,6 +28,7 @@ export class DriverProfileService {
     @InjectRepository(Vehicle) private vehicles: Repository<Vehicle>,
     @InjectRepository(AvailabilitySlot) private slots: Repository<AvailabilitySlot>,
     @InjectRepository(OperatingArea) private areas: Repository<OperatingArea>,
+    @InjectRepository(User) private users: Repository<User>,
   ) {}
 
   async get(driverId: string) {
@@ -29,11 +39,15 @@ export class DriverProfileService {
     if (!d) throw new NotFoundException('Driver not found');
     const v = d.vehicles?.[0];
     return {
+      id: d.id,
       name: d.user?.fullName,
       phone: d.user?.phone,
       email: d.user?.email,
       address: d.address,
+      cedula: d.cedula,
       status: d.status,
+      tier: d.tier,
+      score: d.score,
       eligible: d.eligible,
       securityCleared: d.securityCleared,
       vehicle: v
@@ -45,19 +59,47 @@ export class DriverProfileService {
     };
   }
 
-  async update(driverId: string, input: UpdateProfileInput) {
-    const d = await this.drivers.findOne({ where: { id: driverId }, relations: { vehicles: true, operatingAreas: true } });
+  /** Driver self-service update — personal/contact/vehicle/availability, no security flags. */
+  update(driverId: string, input: UpdateProfileInput) {
+    return this.apply(driverId, input, false);
+  }
+
+  /** Ops update (admin + security officer) — everything the driver can change plus identity & security flags. */
+  adminUpdate(driverId: string, input: UpdateProfileInput) {
+    return this.apply(driverId, input, true);
+  }
+
+  private async apply(driverId: string, input: UpdateProfileInput, admin: boolean) {
+    const d = await this.drivers.findOne({ where: { id: driverId }, relations: { user: true, vehicles: true, operatingAreas: true } });
     if (!d) throw new NotFoundException('Driver not found');
 
-    // home address
-    if (input.address != null) {
-      d.address = input.address;
-      await this.drivers.save(d);
+    // user contact fields (name/email/phone). phone is also the driver's login username.
+    if (d.user && (input.name != null || input.email != null || input.phone != null)) {
+      if (input.name != null) d.user.fullName = input.name;
+      if (input.email != null) d.user.email = input.email || undefined;
+      if (input.phone != null) d.user.phone = input.phone || undefined;
+      try {
+        await this.users.save(d.user);
+      } catch (e: any) {
+        if (e?.code === '23505') throw new BadRequestException('Email or phone already in use by another account');
+        throw e;
+      }
     }
+
+    // driver-profile scalar fields
+    let saveDriver = false;
+    if (input.address != null) { d.address = input.address; saveDriver = true; }
+    if (admin) {
+      if (input.cedula != null) { d.cedula = input.cedula; saveDriver = true; }
+      if (typeof input.securityCleared === 'boolean') { d.securityCleared = input.securityCleared; saveDriver = true; }
+      if (typeof input.eligible === 'boolean') { d.eligible = input.eligible; saveDriver = true; }
+      if (input.status != null) { d.status = input.status; saveDriver = true; }
+    }
+    if (saveDriver) await this.drivers.save(d);
 
     // vehicle
     if (input.vehicle) {
-      let v = d.vehicles?.[0] ?? this.vehicles.create({ driver: d });
+      const v = d.vehicles?.[0] ?? this.vehicles.create({ driver: d });
       if (input.vehicle.type) {
         v.type = input.vehicle.type;
         v.capacityKg = VEHICLE_CAPACITY_KG[input.vehicle.type];

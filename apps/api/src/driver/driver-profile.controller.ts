@@ -14,6 +14,10 @@ class VehicleDto {
   @IsOptional() year?: number | string;
 }
 class UpdateProfileDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() address?: string;
   @IsOptional() @ValidateNested() @Type(() => VehicleDto) vehicle?: VehicleDto;
   @IsOptional() @IsArray() @IsString({ each: true }) zones?: string[];
   @IsOptional() @IsArray() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) days?: number[];
