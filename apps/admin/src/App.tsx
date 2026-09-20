@@ -86,6 +86,7 @@ const TABS = [
   ['drivers', 'Conductores', 'Drivers'],
   ['messages', 'Mensajes', 'Messages'],
   ['users', 'Usuarios', 'Users'],
+  ['ratecards', 'Tarifas', 'Rate cards'],
   ['config', 'Configuración', 'Config'],
 ] as const;
 
@@ -93,6 +94,7 @@ const TABS = [
 const TAB_ROLES: Record<string, string[]> = {
   config: ['admin'],
   users: ['admin'],
+  ratecards: ['admin', 'dispatcher'],
   messages: ['admin', 'dispatcher'],
   plans: ['admin', 'dispatcher'],
   reviews: ['admin', 'security_officer'],
@@ -118,6 +120,128 @@ const STAFF_ROLES: [string, string, string][] = [
   ['security_officer', 'Oficial de seguridad', 'Security officer'],
   ['admin', 'Administrador', 'Administrator'],
 ];
+
+// numeric fields on a rate card, with labels
+const RC_NUM: [string, string, string][] = [
+  ['minPackages', 'Mín. paquetes/día', 'Min packages/day'],
+  ['fixedRate', 'Tarifa fija/día ($)', 'Fixed rate/day ($)'],
+  ['ratePerPackage', 'Tarifa/paquete ($)', 'Rate/package ($)'],
+  ['ratePerKg', 'Tarifa/kg ($)', 'Rate/kg ($)'],
+  ['ratePerKm', 'Tarifa/km ($)', 'Rate/km ($)'],
+  ['avgWeightKg', 'Peso prom./paquete (kg)', 'Avg weight/package (kg)'],
+  ['avgDistanceKm', 'Distancia prom. (km)', 'Avg distance (km)'],
+];
+
+function RateCards({ role }: { role?: string }) {
+  const { t } = useI18n();
+  const canEdit = role === 'admin';
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const load = () => api.rateCards().then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+
+  const blank = () => ({ name: '', active: true, isDefault: false, validFrom: '', validTo: '', minPackages: 0, fixedRate: 0, ratePerPackage: 0, ratePerKg: 0, ratePerKm: 0, avgWeightKg: 0, avgDistanceKm: 0 });
+  const startNew = () => setEditing(blank());
+  const startEdit = (c: any) => setEditing({ ...c, validFrom: c.validFrom || '', validTo: c.validTo || '' });
+  const setF = (k: string, v: any) => setEditing((e: any) => ({ ...e, [k]: v }));
+
+  const save = async () => {
+    if (!editing.name.trim()) { setNote(t('Nombre requerido', 'Name required')); return; }
+    setBusy(true); setNote('');
+    const body = { ...editing };
+    for (const [k] of RC_NUM) body[k] = Number(body[k]) || 0;
+    if (!body.validFrom) body.validFrom = null;
+    if (!body.validTo) body.validTo = null;
+    try { if (editing.id) await api.updateRateCard(editing.id, body); else await api.createRateCard(body); setEditing(null); await load(); }
+    catch (e: any) { setNote(e.message); } finally { setBusy(false); }
+  };
+  const del = async (c: any) => { if (!window.confirm(t(`¿Eliminar la tarifa "${c.name}"?`, `Delete rate card "${c.name}"?`))) return; await api.deleteRateCard(c.id); await load(); };
+
+  // live estimate preview for a sample tender
+  const [sample, setSample] = useState(80);
+  const est = (c: any) => {
+    const met = sample >= (c.minPackages || 0);
+    const fixed = met ? c.fixedRate : c.fixedRate / 2;
+    const pkg = sample * c.ratePerPackage;
+    const wt = sample * c.avgWeightKg * c.ratePerKg;
+    const km = c.avgDistanceKm * c.ratePerKm;
+    return { met, fixed, pkg, wt, km, total: Math.round((fixed + pkg + wt + km) * 100) / 100 };
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, minWidth: 320, display: 'grid', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="eyebrow">{t('Tarifas (pago a conductores)', 'Rate cards (driver pay)')}</span>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{t('Estimar con', 'Estimate for')}</span>
+          <input className="input mono" type="number" style={{ width: 70 }} value={sample} onChange={(e) => setSample(Number(e.target.value) || 0)} />
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{t('paquetes', 'pkgs')}</span>
+          {canEdit && !editing && <button className="btn btn-primary" style={{ padding: '6px 12px' }} onClick={startNew}>+ {t('Tarifa', 'Rate card')}</button>}
+        </div>
+        {!rows && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+        {rows && !rows.length && <div className="card" style={{ padding: 20, color: 'var(--ink-500)' }}>{t('Aún no hay tarifas.', 'No rate cards yet.')}</div>}
+        {rows && rows.map((c) => {
+          const e = est(c);
+          return (
+            <div key={c.id} className="card" style={{ padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{c.name}</span>
+                {c.isDefault && <span className="badge badge-brand">{t('Predeterminada', 'Default')}</span>}
+                <span className={`badge ${c.active ? 'badge-blue' : 'badge-gray'}`}>{c.active ? t('activa', 'active') : t('inactiva', 'inactive')}</span>
+                {(c.validFrom || c.validTo) && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{c.validFrom || '…'} → {c.validTo || '…'}</span>}
+                {canEdit && <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => startEdit(c)}>{t('Editar', 'Edit')}</button>
+                  <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--red-ink, #d9342b)' }} onClick={() => del(c)}>✕</button>
+                </span>}
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8, fontSize: 12.5, color: 'var(--ink-600)' }}>
+                <span>{t('Fija', 'Fixed')} ${c.fixedRate}/{t('día', 'day')} ({t('mín', 'min')} {c.minPackages}, {t('si no', 'else')} ${c.fixedRate / 2})</span>
+                <span>· ${c.ratePerPackage}/{t('paq', 'pkg')}</span>
+                <span>· ${c.ratePerKg}/kg</span>
+                <span>· ${c.ratePerKm}/km</span>
+                <span className="mono" style={{ color: 'var(--ink-400)' }}>· ~{c.avgWeightKg}kg/{t('paq', 'pkg')}, {c.avgDistanceKm}km</span>
+              </div>
+              <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 9, fontSize: 12.5 }}>
+                {t('Estimado', 'Estimate')} @ {sample} {t('paq', 'pkgs')}: <b>${e.total}</b>
+                <span className="mono" style={{ color: 'var(--ink-500)' }}> = ${e.fixed} {e.met ? t('(fija)', '(full)') : t('(media)', '(half)')} + ${Math.round(e.pkg * 100) / 100} + ${Math.round(e.wt * 100) / 100} + ${Math.round(e.km * 100) / 100}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && (
+        <div className="card" style={{ width: 340, maxWidth: '100%', flexShrink: 0, padding: 18, position: 'sticky', top: 0 }}>
+          <div className="eyebrow" style={{ marginBottom: 10 }}>{editing.id ? t('Editar tarifa', 'Edit rate card') : t('Nueva tarifa', 'New rate card')}</div>
+          <label className="field-label">{t('Nombre', 'Name')}</label>
+          <input className="input" value={editing.name} onChange={(e) => setF('name', e.target.value)} style={{ marginBottom: 10 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div><label className="field-label">{t('Válida desde', 'Valid from')}</label><input className="input mono" type="date" value={editing.validFrom} onChange={(e) => setF('validFrom', e.target.value)} /></div>
+            <div><label className="field-label">{t('Válida hasta', 'Valid to')}</label><input className="input mono" type="date" value={editing.validTo} onChange={(e) => setF('validTo', e.target.value)} /></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
+            {RC_NUM.map(([k, es, en]) => (
+              <div key={k}><label className="field-label">{t(es, en)}</label><input className="input mono" type="number" value={editing[k]} onChange={(e) => setF(k, e.target.value)} /></div>
+            ))}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, marginTop: 12 }}>
+            <input type="checkbox" checked={!!editing.active} onChange={(e) => setF('active', e.target.checked)} /> {t('Activa', 'Active')}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, marginTop: 6 }}>
+            <input type="checkbox" checked={!!editing.isDefault} onChange={(e) => setF('isDefault', e.target.checked)} /> {t('Predeterminada (aplica sin asignación)', 'Default (applies when unassigned)')}
+          </label>
+          {note && <div className="badge badge-red" style={{ marginTop: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>{t('Cancelar', 'Cancel')}</button>
+            <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={save}>{busy ? '…' : t('Guardar', 'Save')}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function UsersManager() {
   const { t } = useI18n();
@@ -778,6 +902,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'drivers' && <Drivers role={me?.role} />}
           {tab === 'messages' && <Messages />}
           {tab === 'users' && <UsersManager />}
+          {tab === 'ratecards' && <RateCards role={me?.role} />}
           {tab === 'config' && <Config />}
         </div>
       </div>
@@ -1331,13 +1456,15 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
   const { t, lang } = useI18n();
   const [f, setF] = useState<any>(null);
   const [zones, setZones] = useState<any[]>([]);
+  const [cards, setCards] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    api.getDriver(driverId).then((d) => { if (live) setF({ ...d, vehicle: d.vehicle || {}, zones: d.zones || [], days: d.days || [], blocks: d.blocks || [] }); }).catch((e) => setErr(e.message));
+    api.getDriver(driverId).then((d) => { if (live) setF({ ...d, vehicle: d.vehicle || {}, zones: d.zones || [], days: d.days || [], blocks: d.blocks || [], rateCardId: d.rateCardId || '' }); }).catch((e) => setErr(e.message));
     api.zones().then((z) => live && setZones(z)).catch(() => {});
+    api.rateCards().then((c) => live && setCards(c)).catch(() => {});
     return () => { live = false; };
   }, [driverId]);
 
@@ -1353,7 +1480,7 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
       await api.updateDriver(driverId, {
         name: f.name, email: f.email, phone: f.phone, address: f.address, cedula: f.cedula,
         vehicle: f.vehicle, zones: f.zones, days: f.days, blocks: f.blocks,
-        securityCleared: f.securityCleared, eligible: f.eligible, status: f.status,
+        securityCleared: f.securityCleared, eligible: f.eligible, status: f.status, rateCardId: f.rateCardId || '',
       });
       onSaved();
     } catch (e: any) { setErr(e.message); } finally { setSaving(false); }
@@ -1409,6 +1536,14 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {BLOCKS.map(([id, en, es]) => chip((f.blocks || []).includes(id), lang === 'es' ? es : en, () => toggle('blocks', id), id))}
           </div>
+
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Tarifa de pago', 'Pay rate card')}</div>
+          <EField label={t('Tarifa asignada', 'Assigned rate card')}>
+            <select className="input" value={f.rateCardId || ''} onChange={(e) => setF({ ...f, rateCardId: e.target.value })}>
+              <option value="">{t('(Predeterminada)', '(Default)')}</option>
+              {cards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ` · ${t('predet.', 'default')}` : ''}</option>)}
+            </select>
+          </EField>
 
           <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Estado y seguridad', 'Status & security')}</div>
           <EField label={t('Estado', 'Status')}>

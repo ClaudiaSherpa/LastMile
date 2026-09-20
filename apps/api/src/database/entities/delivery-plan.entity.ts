@@ -118,6 +118,10 @@ export class PlanTender {
   @Column({ default: false })
   preassigned: boolean;
 
+  // estimated pay for this tender at broadcast time (from the driver's rate card)
+  @Column({ type: 'jsonb', nullable: true })
+  estimate?: Record<string, any>;
+
   @Column({ type: 'enum', enum: PlanTenderStatus, default: PlanTenderStatus.OFFERED })
   status: PlanTenderStatus;
 

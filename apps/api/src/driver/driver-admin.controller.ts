@@ -27,6 +27,7 @@ class AdminUpdateDriverDto {
   @IsOptional() @IsBoolean() securityCleared?: boolean;
   @IsOptional() @IsBoolean() eligible?: boolean;
   @IsOptional() @IsEnum(DriverStatus) status?: DriverStatus;
+  @IsOptional() @IsString() rateCardId?: string;
 }
 
 /**

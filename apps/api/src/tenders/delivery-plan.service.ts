@@ -23,10 +23,12 @@ import {
   DriverDay,
   DriverProfile,
   PlanTender,
+  RateCard,
   User,
 } from '../database/entities';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { RateCardService } from '../rate-cards/rate-card.service';
 import { env } from '../config/env';
 
 export interface PlanLineInput {
@@ -58,6 +60,7 @@ export class DeliveryPlanService {
     @InjectRepository(DriverDay) private driverDays: Repository<DriverDay>,
     private realtime: RealtimeGateway,
     private whatsapp: WhatsAppService,
+    private rateCards: RateCardService,
   ) {}
 
   private prettyParish(slug: string): string {
@@ -65,13 +68,14 @@ export class DeliveryPlanService {
   }
 
   /** WhatsApp a driver that a tender is available, with a link to open the app. */
-  private notifyOffer(phone: string | undefined, parish: string, packages: number, hub: string, date?: string, preassigned = false) {
+  private notifyOffer(phone: string | undefined, parish: string, packages: number, hub: string, date?: string, preassigned = false, estTotal?: number | null) {
     if (!phone) return;
     const when = date ? ` (${date})` : '';
     const link = env.api.publicBaseUrl;
+    const est = estTotal != null ? ` Est. pay $${estTotal}.` : '';
     const text = preassigned
-      ? `PasarEx: You've been pre-assigned ${packages} packages for ${this.prettyParish(parish)}${when}, pickup at ${hub}. Open the app: ${link}`
-      : `PasarEx: New delivery offer${when} — ${packages} packages for ${this.prettyParish(parish)}, pickup at ${hub}. Open the app to accept: ${link}`;
+      ? `PasarEx: You've been pre-assigned ${packages} packages for ${this.prettyParish(parish)}${when}, pickup at ${hub}.${est} Open the app: ${link}`
+      : `PasarEx: New delivery offer${when} — ${packages} packages for ${this.prettyParish(parish)}, pickup at ${hub}.${est} Open the app to accept: ${link}`;
     void this.whatsapp.send(phone, text).catch(() => {});
   }
 
@@ -171,7 +175,7 @@ export class DeliveryPlanService {
 
   /** Candidate drivers with the fields eligibility + capacity need. */
   private async candidates(): Promise<
-    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType; weekdays: number[]; phone?: string }>
+    Array<{ id: string; securityCleared: boolean; eligible: boolean; zones: string[]; vehicle?: VehicleType; weekdays: number[]; phone?: string; rateCardId?: string }>
   > {
     const list = await this.drivers.find({ relations: { vehicles: true, operatingAreas: true, availability: true, user: true } });
     return list.map((d) => ({
@@ -182,7 +186,13 @@ export class DeliveryPlanService {
       vehicle: d.vehicles?.[0]?.type as VehicleType | undefined,
       weekdays: Array.from(new Set((d.availability ?? []).map((s) => s.weekday))),
       phone: d.user?.phone,
+      rateCardId: d.rateCardId,
     }));
+  }
+
+  /** Pay estimate for a driver's tender of N packages (their rate card on `date`). */
+  private payEstimate(cards: RateCard[], rateCardId: string | undefined, packages: number, date: string) {
+    return this.rateCards.estimate(this.rateCards.pick(cards, rateCardId, date), packages) ?? undefined;
   }
 
   private eligibleForParish(
@@ -206,6 +216,8 @@ export class DeliveryPlanService {
 
     const cands = await this.candidates();
     const byId = new Map(cands.map((c) => [c.id, c]));
+    const cards = await this.rateCards.all();
+    const estDate = plan.operationalDate || new Date().toISOString().slice(0, 10);
     // only tender to drivers available on the plan's operational weekday
     const weekday = plan.operationalDate ? new Date(`${plan.operationalDate}T00:00:00Z`).getUTCDay() : null;
 
@@ -225,12 +237,13 @@ export class DeliveryPlanService {
         const c = byId.get(drvId);
         const cap = line.preassignedPackages?.[drvId] ?? this.capacityOf(plan, c?.vehicle);
         if (!c || cap <= 0) { this.logger.warn(`preassigned ${drvId} has no usable vehicle/quantity`); continue; }
+        const est = this.payEstimate(cards, c.rateCardId, cap, estDate);
         await this.tenders.save(
-          this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }),
+          this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, estimate: est, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }),
         );
         accepted += cap;
-        this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true });
-        this.notifyOffer(c?.phone, line.parish, cap, plan.hubName, plan.operationalDate, true);
+        this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true, estimate: est });
+        this.notifyOffer(c?.phone, line.parish, cap, plan.hubName, plan.operationalDate, true, est?.total);
       }
 
       // 2) tender the remainder to eligible (non-preassigned) drivers
@@ -240,11 +253,12 @@ export class DeliveryPlanService {
         for (const c of eligible) {
           const cap = this.capacityOf(plan, c.vehicle);
           if (cap <= 0) continue;
+          const est = this.payEstimate(cards, c.rateCardId, cap, estDate);
           await this.tenders.save(
-            this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, status: PlanTenderStatus.OFFERED }),
+            this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, estimate: est, status: PlanTenderStatus.OFFERED }),
           );
-          this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName });
-          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate);
+          this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, estimate: est });
+          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, false, est?.total);
         }
         // no one can cover the remainder -> the line is unfeasible
         line.status = eligible.length ? PlanLineStatus.BROADCASTING : PlanLineStatus.UNFEASIBLE;
@@ -280,6 +294,8 @@ export class DeliveryPlanService {
 
     const cands = await this.candidates();
     const byId = new Map(cands.map((c) => [c.id, c]));
+    const cards = await this.rateCards.all();
+    const estDate = plan.operationalDate || new Date().toISOString().slice(0, 10);
     const weekday = plan.operationalDate ? new Date(`${plan.operationalDate}T00:00:00Z`).getUTCDay() : null;
 
     let newOffers = 0;
@@ -299,11 +315,12 @@ export class DeliveryPlanService {
         const c = byId.get(drvId);
         const cap = line.preassignedPackages?.[drvId] ?? this.capacityOf(plan, c?.vehicle);
         if (!c || cap <= 0) continue;
-        await this.tenders.save(this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }));
+        const est = this.payEstimate(cards, c.rateCardId, cap, estDate);
+        await this.tenders.save(this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, estimate: est, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }));
         line.acceptedPackages += cap;
         seen.add(drvId);
-        this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true });
-        this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, true);
+        this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true, estimate: est });
+        this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, true, est?.total);
       }
 
       // offer the remainder to newly-eligible (non-pre-assigned, not-yet-tendered) drivers
@@ -313,9 +330,10 @@ export class DeliveryPlanService {
         for (const c of eligibleNew) {
           const cap = this.capacityOf(plan, c.vehicle);
           if (cap <= 0) continue;
-          await this.tenders.save(this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, status: PlanTenderStatus.OFFERED }));
-          this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName });
-          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate);
+          const est = this.payEstimate(cards, c.rateCardId, cap, estDate);
+          await this.tenders.save(this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, estimate: est, status: PlanTenderStatus.OFFERED }));
+          this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, estimate: est });
+          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, false, est?.total);
           newOffers++; hasOpenOffers = true;
         }
       }
@@ -431,6 +449,7 @@ export class DeliveryPlanService {
       packages: t.packages,
       hub: t.line.plan.hubName,
       plan: t.line.plan.reference,
+      estimate: t.estimate ?? null,
     }));
   }
 
@@ -474,6 +493,7 @@ export class DeliveryPlanService {
             packages: t.packages,
             status: t.status,
             preassigned: t.preassigned,
+            estimate: t.estimate ?? null,
           })),
         };
       }),
@@ -579,6 +599,7 @@ export class DeliveryPlanService {
             plannedArrival: timeStr(dd?.plannedArrivalAt),
             actualArrival: timeStr(dd?.depotArrivalAt),
             arrivalDeltaMin: deltaMin,
+            estimate: t.estimate ?? null,
             status: accepted ? (delivery?.status ?? 'accepted') : t.status,
           });
         }

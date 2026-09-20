@@ -61,6 +61,10 @@ export class DriverProfile {
   @Column({ nullable: true })
   address?: string;
 
+  // explicitly-assigned pay rate card (else the default card applies)
+  @Column({ type: 'uuid', nullable: true })
+  rateCardId?: string;
+
   @Column({ type: 'enum', enum: DriverStatus, default: DriverStatus.OFFDUTY })
   status: DriverStatus;
 

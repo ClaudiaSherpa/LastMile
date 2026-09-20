@@ -152,6 +152,10 @@ export const api = {
     request<any>(`/messages/driver/${driverId}`, { method: 'POST', body: JSON.stringify({ text }) }),
   broadcast: (text: string, groupId?: string) =>
     request<any>('/messages/broadcast', { method: 'POST', body: JSON.stringify({ text, groupId }) }),
+  rateCards: () => request<any[]>('/rate-cards'),
+  createRateCard: (b: any) => request<any>('/rate-cards', { method: 'POST', body: JSON.stringify(b) }),
+  updateRateCard: (id: string, b: any) => request<any>(`/rate-cards/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  deleteRateCard: (id: string) => request<any>(`/rate-cards/${id}`, { method: 'DELETE' }),
   driverGroups: () => request<any[]>('/driver-groups'),
   createGroup: (b: { name: string; color?: string; driverIds?: string[] }) =>
     request<any>('/driver-groups', { method: 'POST', body: JSON.stringify(b) }),

@@ -965,7 +965,15 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
               <strong style={{ fontSize: 15 }}>{parishName(o.parish)}</strong>
               <span className="badge badge-brand">{o.packages} {t('paquetes', 'pkgs')}</span>
             </div>
-            <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '3px 0 10px' }}>{t('Recoge en', 'Pick up at')} {o.hub}</div>
+            <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '3px 0 8px' }}>{t('Recoge en', 'Pick up at')} {o.hub}</div>
+            {o.estimate && (
+              <div style={{ background: 'var(--brand-tint)', color: 'var(--brand-ink)', borderRadius: 9, padding: '8px 10px', fontSize: 12.5, marginBottom: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{t('Pago estimado', 'Estimated pay')}: ${o.estimate.total}</div>
+                <div className="mono" style={{ fontSize: 10.5, opacity: 0.85, marginTop: 2 }}>
+                  ${o.estimate.fixed} {o.estimate.metMinimum ? t('fija', 'fixed') : t('media', 'half')} · ${o.estimate.perPackage} {t('paq', 'pkg')} · ${o.estimate.perWeight} kg · ${o.estimate.perKm} km
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy === o.id} onClick={() => accept(o)}>{t('Aceptar', 'Accept')}</button>
               <button className="btn btn-ghost" disabled={busy === o.id} onClick={() => decline(o)}>{t('Rechazar', 'Decline')}</button>

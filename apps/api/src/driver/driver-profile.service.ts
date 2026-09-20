@@ -19,6 +19,7 @@ export interface UpdateProfileInput {
   securityCleared?: boolean;
   eligible?: boolean;
   status?: DriverStatus;
+  rateCardId?: string | null; // assigned pay rate card
 }
 
 @Injectable()
@@ -50,6 +51,7 @@ export class DriverProfileService {
       score: d.score,
       eligible: d.eligible,
       securityCleared: d.securityCleared,
+      rateCardId: d.rateCardId ?? null,
       vehicle: v
         ? { type: v.type, plate: v.plate, brand: v.brand, model: v.model, year: v.year, color: v.color, capacityKg: v.capacityKg }
         : null,
@@ -94,6 +96,7 @@ export class DriverProfileService {
       if (typeof input.securityCleared === 'boolean') { d.securityCleared = input.securityCleared; saveDriver = true; }
       if (typeof input.eligible === 'boolean') { d.eligible = input.eligible; saveDriver = true; }
       if (input.status != null) { d.status = input.status; saveDriver = true; }
+      if (input.rateCardId !== undefined) { d.rateCardId = input.rateCardId || undefined; saveDriver = true; }
     }
     if (saveDriver) await this.drivers.save(d);
 
