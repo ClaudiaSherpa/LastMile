@@ -36,6 +36,11 @@ export class User {
   @Column({ nullable: true })
   refreshTokenHash?: string;
 
+  // one-time token for a staff invite (set until the invitee completes signup)
+  @Index({ unique: true })
+  @Column({ nullable: true })
+  inviteToken?: string;
+
   @Column({ default: true })
   active: boolean;
 

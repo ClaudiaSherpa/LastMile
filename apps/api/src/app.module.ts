@@ -17,6 +17,7 @@ import { ConfigAdminModule } from './config-admin/config.module';
 import { DocumentsModule } from './documents/documents.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { MessagingModule } from './messaging/messaging.module';
+import { UsersModule } from './users/users.module';
 import { DriverModule } from './driver/driver.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
@@ -41,6 +42,7 @@ import { AppController } from './app.controller';
     WhatsAppModule,
     DriverModule,
     MessagingModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

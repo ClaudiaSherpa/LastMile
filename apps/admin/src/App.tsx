@@ -85,12 +85,14 @@ const TABS = [
   ['plans', 'Planes', 'Delivery plans'],
   ['drivers', 'Conductores', 'Drivers'],
   ['messages', 'Mensajes', 'Messages'],
+  ['users', 'Usuarios', 'Users'],
   ['config', 'Configuración', 'Config'],
 ] as const;
 
 // tabs only some roles may open (others are visible to all staff)
 const TAB_ROLES: Record<string, string[]> = {
   config: ['admin'],
+  users: ['admin'],
   messages: ['admin', 'dispatcher'],
   plans: ['admin', 'dispatcher'],
   reviews: ['admin', 'security_officer'],
@@ -110,6 +112,99 @@ const MAP_ASPECT =
 const tierColor: Record<string, string> = { elite: 'var(--brand)', preferente: 'var(--blue)', estandar: 'var(--ink-500)', nuevo: 'var(--amber)' };
 
 const waStatusBadge: Record<string, string> = { sent: 'badge-brand', received: 'badge-blue', failed: 'badge-red', skipped: 'badge-amber' };
+
+const STAFF_ROLES: [string, string, string][] = [
+  ['dispatcher', 'Despachador', 'Dispatcher'],
+  ['security_officer', 'Oficial de seguridad', 'Security officer'],
+  ['admin', 'Administrador', 'Administrator'],
+];
+
+function UsersManager() {
+  const { t } = useI18n();
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [phone, setPhone] = useState('');
+  const [role, setRole] = useState('dispatcher');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [created, setCreated] = useState<any>(null);
+  const load = () => api.listUsers().then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+  const roleLabel = (r: string) => { const m = STAFF_ROLES.find((x) => x[0] === r); return m ? t(m[1], m[2]) : r; };
+  const copy = (txt: string) => { navigator.clipboard?.writeText(txt).then(() => { setNote(t('Enlace copiado', 'Link copied')); setTimeout(() => setNote(''), 1800); }).catch(() => {}); };
+
+  const invite = async () => {
+    if (!phone.trim()) return;
+    setBusy(true); setNote(''); setCreated(null);
+    try {
+      const r = await api.inviteUser(phone.trim(), role);
+      setCreated(r); setPhone(''); await load();
+    } catch (e: any) { setNote(e.message); } finally { setBusy(false); }
+  };
+  const revoke = async (u: any) => { if (!window.confirm(t(`¿Revocar la invitación de ${u.phone}?`, `Revoke the invite for ${u.phone}?`))) return; await api.revokeUser(u.id); await load(); };
+
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div className="card" style={{ width: 340, maxWidth: '100%', flexShrink: 0, padding: 18 }}>
+        <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Invitar usuario', 'Invite user')}</div>
+        <label className="field-label">{t('Número de teléfono', 'Phone number')}</label>
+        <input className="input mono" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 246 555 0100" style={{ marginBottom: 10 }} />
+        <label className="field-label">{t('Rol', 'Role')}</label>
+        <select className="input" value={role} onChange={(e) => setRole(e.target.value)} style={{ marginBottom: 12 }}>
+          {STAFF_ROLES.map(([id, es, en]) => <option key={id} value={id}>{t(es, en)}</option>)}
+        </select>
+        {note && <div className="badge badge-amber" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+        <button className="btn btn-primary btn-block" disabled={busy || !phone.trim()} onClick={invite}>{busy ? '…' : t('Crear invitación', 'Create invite')}</button>
+        {created && (
+          <div style={{ marginTop: 14, padding: 12, background: 'var(--surface-2)', borderRadius: 10 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{t('Invitación creada ✓', 'Invite created ✓')}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-500)', marginBottom: 4 }}>{t('Envía este enlace al usuario:', 'Send this link to the user:')}</div>
+            <div className="mono" style={{ fontSize: 11, wordBreak: 'break-all', background: 'var(--surface)', padding: 8, borderRadius: 8 }}>{created.inviteUrl}</div>
+            <button className="btn btn-ghost btn-block" style={{ marginTop: 8, fontSize: 12.5 }} onClick={() => copy(created.inviteUrl)}>{t('Copiar enlace de invitación', 'Copy invite link')}</button>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '10px 0 4px' }}>{t('Enlace de Operaciones (para iniciar sesión):', 'Ops link (to sign in):')}</div>
+            <div className="mono" style={{ fontSize: 11, wordBreak: 'break-all', background: 'var(--surface)', padding: 8, borderRadius: 8 }}>{created.opsUrl}</div>
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ flex: 1, minWidth: 300, overflow: 'hidden' }}>
+        <div className="eyebrow" style={{ padding: '14px 16px 4px' }}>{t('Equipo', 'Team')}</div>
+        {!rows && <div style={{ padding: 16, color: 'var(--ink-500)' }}>…</div>}
+        {rows && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
+                <th style={{ padding: '10px 16px' }}>{t('Usuario', 'User')}</th>
+                <th style={{ padding: '10px 16px' }}>{t('Rol', 'Role')}</th>
+                <th style={{ padding: '10px 16px' }}>{t('Estado', 'Status')}</th>
+                <th style={{ padding: '10px 16px' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((u) => (
+                <tr key={u.id} style={{ borderTop: '1px solid var(--line)' }}>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ fontWeight: 600 }}>{u.status === 'pending' ? t('(pendiente)', '(pending)') : u.name}</div>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{u.phone}{u.email ? ` · ${u.email}` : ''}</div>
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>{roleLabel(u.role)}</td>
+                  <td style={{ padding: '12px 16px' }}><span className={`badge ${u.status === 'active' ? 'badge-brand' : 'badge-amber'}`}>{u.status === 'active' ? t('activo', 'active') : t('pendiente', 'pending')}</span></td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {u.status === 'pending' && u.inviteUrl && (
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => copy(u.inviteUrl)}>{t('Copiar enlace', 'Copy link')}</button>
+                    )}
+                    {u.status === 'pending' && (
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--red-ink, #d9342b)' }} onClick={() => revoke(u)}>✕</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function GroupsManager({ groups, onChanged }: { groups: any[]; onChanged: () => void }) {
   const { t } = useI18n();
@@ -682,6 +777,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'plans' && <DeliveryPlans />}
           {tab === 'drivers' && <Drivers role={me?.role} />}
           {tab === 'messages' && <Messages />}
+          {tab === 'users' && <UsersManager />}
           {tab === 'config' && <Config />}
         </div>
       </div>
@@ -1689,9 +1785,68 @@ export function App() {
 
   const logout = () => { auth.clear(); setMe(null); };
 
+  // staff invite acceptance link: /ops?invite=<token>
+  const inviteToken = useMemo(() => new URLSearchParams(window.location.search).get('invite'), []);
+
   return (
     <I18nCtx.Provider value={i18n}>
-      {!ready ? null : me ? <Shell me={me} onLogout={logout} /> : <Login onDone={loadMe} />}
+      {inviteToken
+        ? <AcceptInvite token={inviteToken} />
+        : !ready ? null : me ? <Shell me={me} onLogout={logout} /> : <Login onDone={loadMe} />}
     </I18nCtx.Provider>
+  );
+}
+
+// Public page an invited staff member opens to complete their account.
+function AcceptInvite({ token }: { token: string }) {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [f, setF] = useState({ firstName: '', lastName: '', email: '', password: '' });
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ opsUrl: string } | null>(null);
+
+  useEffect(() => { api.getInvite(token).then(setInfo).catch((e) => setErr(e.message)); }, [token]);
+  const roleLabel = (r: string) => ({ admin: t('Administrador', 'Administrator'), dispatcher: t('Despachador', 'Dispatcher'), security_officer: t('Oficial de seguridad', 'Security officer') } as any)[r] || r;
+
+  const submit = async () => {
+    if (!f.firstName.trim() || !f.lastName.trim() || f.password.length < 6) { setErr(t('Completa nombre, apellido y una contraseña de 6+ caracteres.', 'Enter first name, last name and a 6+ character password.')); return; }
+    setBusy(true); setErr(null);
+    try { const r = await api.acceptInvite(token, f); setDone({ opsUrl: r.opsUrl || `${location.origin}/ops` }); }
+    catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--paper)', padding: 16 }}>
+      <div className="card" style={{ width: 420, maxWidth: '100%', padding: 26 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand)' }} />
+          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand)' }}>LM</span></span>
+        </div>
+        {done ? (<>
+          <h1 className="display" style={{ fontSize: 22, margin: '0 0 8px' }}>{t('¡Cuenta creada!', 'Account created!')}</h1>
+          <p style={{ fontSize: 14, color: 'var(--ink-600)', lineHeight: 1.5 }}>{t('Ya puedes iniciar sesión con tu número y contraseña.', 'You can now sign in with your number and password.')}</p>
+          <a className="btn btn-primary btn-block" style={{ marginTop: 16, textDecoration: 'none' }} href={done.opsUrl}>{t('Ir a Operaciones', 'Go to Ops')}</a>
+        </>) : !info && !err ? <div style={{ color: 'var(--ink-500)' }}>…</div> : err && !info ? (
+          <div className="badge badge-red" style={{ whiteSpace: 'normal', height: 'auto', padding: 10 }}>{err}</div>
+        ) : (<>
+          <span className="eyebrow">{t('Invitación de equipo', 'Team invite')}</span>
+          <h1 className="display" style={{ fontSize: 22, margin: '4px 0 4px' }}>{t('Completa tu cuenta', 'Complete your account')}</h1>
+          <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>
+            {roleLabel(info.role)}{info.phone ? ` · ${info.phone}` : ''}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div><label className="field-label">{t('Nombre', 'First name')}</label><input className="input" value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} /></div>
+            <div><label className="field-label">{t('Apellido', 'Last name')}</label><input className="input" value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} /></div>
+          </div>
+          <label className="field-label" style={{ marginTop: 10 }}>{t('Correo', 'Email')}</label>
+          <input className="input" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="you@company.com" />
+          <label className="field-label" style={{ marginTop: 10 }}>{t('Contraseña', 'Password')}</label>
+          <input className="input" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+          {err && <div className="badge badge-red" style={{ marginTop: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{err}</div>}
+          <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={busy} onClick={submit}>{busy ? '…' : t('Crear cuenta', 'Create account')}</button>
+        </>)}
+      </div>
+    </div>
   );
 }

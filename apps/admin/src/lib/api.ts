@@ -61,6 +61,13 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   me: () => request<{ sub: string; role: string; email?: string }>('/auth/me'),
+  // staff users + invites (admin)
+  listUsers: () => request<any[]>('/users'),
+  inviteUser: (phone: string, role: string) => request<any>('/users/invite', { method: 'POST', body: JSON.stringify({ phone, role }) }),
+  revokeUser: (id: string) => request<any>(`/users/${id}`, { method: 'DELETE' }),
+  getInvite: (token: string) => request<{ phone?: string; role: string }>(`/users/invite/${token}`),
+  acceptInvite: (token: string, body: { firstName: string; lastName: string; email?: string; password: string }) =>
+    request<any>(`/users/invite/${token}/accept`, { method: 'POST', body: JSON.stringify(body) }),
   overview: () => request<any>('/overview'),
   dashboard: (period: 'day' | 'week' | 'month', groupId?: string, date?: string) =>
     request<any>(`/dashboard?period=${period}${groupId ? `&groupId=${groupId}` : ''}${date ? `&date=${date}` : ''}`),
