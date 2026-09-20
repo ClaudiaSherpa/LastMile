@@ -80,6 +80,7 @@ const TABS = [
   ['dashboard', 'Panel', 'Dashboard'],
   ['map', 'Mapa en vivo', 'Live map'],
   ['approvals', 'Aprobaciones', 'Approvals'],
+  ['reviews', 'Revisión docs', 'Doc reviews'],
   ['compliance', 'Cumplimiento', 'Compliance'],
   ['plans', 'Planes', 'Delivery plans'],
   ['drivers', 'Conductores', 'Drivers'],
@@ -92,6 +93,7 @@ const TAB_ROLES: Record<string, string[]> = {
   config: ['admin'],
   messages: ['admin', 'dispatcher'],
   plans: ['admin', 'dispatcher'],
+  reviews: ['admin', 'security_officer'],
 };
 
 // Barbados bounding box -> 0..100% map space
@@ -401,6 +403,17 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
   const [drawer, setDrawer] = useState(false);
   const pick = (id: string) => { setTab(id); setDrawer(false); };
 
+  // live count of documents awaiting review — the security "notification"
+  const canReview = me?.role === 'admin' || me?.role === 'security_officer';
+  const [reviewCount, setReviewCount] = useState(0);
+  const refreshReviewCount = useCallback(() => {
+    if (canReview) api.documentReviewCount().then((r) => setReviewCount(r.pending)).catch(() => {});
+  }, [canReview]);
+  useRoom('ops');
+  useEffect(() => { refreshReviewCount(); }, [refreshReviewCount]);
+  useEvent('document.pending', useCallback(() => refreshReviewCount(), [refreshReviewCount]));
+  useEvent('document.reviewed', useCallback(() => refreshReviewCount(), [refreshReviewCount]));
+
   return (
     <div style={{ display: 'flex', height: '100vh', maxHeight: '100dvh', background: 'var(--paper)' }}>
       {/* sidebar — fixed off-canvas drawer on mobile, static column on desktop */}
@@ -419,10 +432,13 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
         </div>
         {TABS.filter(([id]) => !TAB_ROLES[id] || TAB_ROLES[id].includes(me?.role)).map(([id, es, en]) => (
           <button key={id} onClick={() => pick(id)}
-            style={{ textAlign: 'left', border: 'none', borderRadius: 9, padding: '10px 12px', marginBottom: 4,
+            style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', border: 'none', borderRadius: 9, padding: '10px 12px', marginBottom: 4,
               fontSize: 14, fontWeight: 600, background: tab === id ? 'var(--brand)' : 'transparent',
               color: tab === id ? '#063' : 'rgba(255,255,255,.65)' }}>
-            {t(es, en)}
+            <span style={{ flex: 1 }}>{t(es, en)}</span>
+            {id === 'reviews' && reviewCount > 0 && (
+              <span style={{ background: 'var(--red-ink, #d9342b)', color: '#fff', borderRadius: 999, fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, padding: '0 5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{reviewCount}</span>
+            )}
           </button>
         ))}
         <div style={{ marginTop: 'auto', fontSize: 12, color: 'rgba(255,255,255,.5)' }}>
@@ -456,6 +472,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'dashboard' && <Dashboard />}
           {tab === 'map' && <LiveMap role={me?.role} />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
+          {tab === 'reviews' && <DocumentReviews onChanged={refreshReviewCount} />}
           {tab === 'compliance' && <Compliance />}
           {tab === 'plans' && <DeliveryPlans />}
           {tab === 'drivers' && <Drivers role={me?.role} />}
@@ -1005,6 +1022,83 @@ function EField({ label, children }: { label: string; children: ReactNode }) {
       <div style={{ fontSize: 11.5, color: 'var(--ink-500)', marginBottom: 4 }}>{label}</div>
       {children}
     </label>
+  );
+}
+
+// Document review queue (admin + security officer): approve/reject the
+// documents drivers upload after onboarding; rejection notifies over WhatsApp.
+function DocumentReviews({ onChanged }: { onChanged: () => void }) {
+  const { t, lang } = useI18n();
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
+  const load = () => api.documentReviews().then(setRows).catch(() => setRows([]));
+
+  useRoom('ops');
+  useEffect(() => { load(); }, []);
+  useEvent('document.pending', useCallback(() => load(), []));
+
+  const approve = async (r: any) => {
+    setBusy(r.id);
+    try { await api.approveDocument(r.id); flash(t('Documento aprobado', 'Document approved')); await load(); onChanged(); }
+    catch (e: any) { flash(e.message); } finally { setBusy(''); }
+  };
+  const doReject = async (r: any) => {
+    if (!reason.trim()) return;
+    setBusy(r.id);
+    try {
+      const res = await api.rejectDocument(r.id, reason.trim());
+      flash(res.whatsappNotified
+        ? t('Rechazado · conductor notificado por WhatsApp', 'Rejected · driver notified via WhatsApp')
+        : t('Rechazado (WhatsApp no enviado)', 'Rejected (WhatsApp not sent)'));
+      setRejecting(null); setReason(''); await load(); onChanged();
+    } catch (e: any) { flash(e.message); } finally { setBusy(''); }
+  };
+
+  return (
+    <div style={{ maxWidth: 760 }}>
+      <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>
+        {t('Documentos subidos por conductores que esperan revisión.', 'Driver-uploaded documents awaiting review.')}
+      </div>
+      {!rows && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+      {rows && !rows.length && <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--ink-500)' }}>{t('No hay documentos pendientes.', 'No documents pending review.')}</div>}
+      <div style={{ display: 'grid', gap: 12 }}>
+        {(rows || []).map((r) => (
+          <div key={r.id} className="card" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{lang === 'es' ? r.docNameEs : r.docName}{r.required && <span style={{ color: 'var(--brand-ink)' }}> *</span>}</div>
+                <div className="mono" style={{ fontSize: 12, color: 'var(--ink-500)' }}>{r.driverName || r.driverId}{r.phone ? ` · ${r.phone}` : ''}</div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-400)' }}>
+                  {t('Subido', 'Uploaded')} {new Date(r.uploadedAt).toLocaleString()}{r.expiryDate ? ` · ${t('vence', 'exp')} ${r.expiryDate}` : ''}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                {r.hasFile && <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => setViewDoc({ id: r.id, name: r.docName })}>{t('Ver', 'View')}</button>}
+                <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 12.5 }} disabled={busy === r.id} onClick={() => approve(r)}>{t('Aprobar', 'Approve')}</button>
+                <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: 12.5, color: 'var(--red-ink, #d9342b)' }} disabled={busy === r.id} onClick={() => { setRejecting(rejecting === r.id ? null : r.id); setReason(''); }}>{t('Rechazar', 'Reject')}</button>
+              </div>
+            </div>
+            {rejecting === r.id && (
+              <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                <textarea className="input" rows={2} placeholder={t('Motivo del rechazo (se envía al conductor por WhatsApp)', 'Rejection reason (sent to the driver via WhatsApp)')}
+                  value={reason} onChange={(e) => setReason(e.target.value)} />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => { setRejecting(null); setReason(''); }}>{t('Cancelar', 'Cancel')}</button>
+                  <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 12.5, background: 'var(--red-ink, #d9342b)' }} disabled={!reason.trim() || busy === r.id} onClick={() => doReject(r)}>{t('Confirmar rechazo', 'Confirm rejection')}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
+      {toast && <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'var(--ink-900)', color: '#fff', padding: '10px 16px', borderRadius: 10, fontSize: 13, zIndex: 60, boxShadow: 'var(--shadow-lg)' }}>{toast}</div>}
+    </div>
   );
 }
 

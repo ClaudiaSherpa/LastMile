@@ -5,6 +5,7 @@ import { DocumentStatus } from '@sherpa/shared';
 import { Document, DocumentType, DriverProfile } from '../database/entities';
 import { StorageService } from '../storage/storage.service';
 import { OcrService } from '../ocr/ocr.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
 export class DriverDocumentsService {
@@ -14,6 +15,7 @@ export class DriverDocumentsService {
     @InjectRepository(DriverProfile) private drivers: Repository<DriverProfile>,
     private storage: StorageService,
     private ocr: OcrService,
+    private realtime: RealtimeGateway,
   ) {}
 
   /** The driver's document checklist: every active type + their current upload (if any). */
@@ -57,7 +59,7 @@ export class DriverDocumentsService {
     if (!docKey) throw new BadRequestException('docKey is required');
     const docType = await this.docTypes.findOne({ where: { key: docKey, active: true } });
     if (!docType) throw new BadRequestException(`Unknown document type: ${docKey}`);
-    const driver = await this.drivers.findOne({ where: { id: driverId } });
+    const driver = await this.drivers.findOne({ where: { id: driverId }, relations: { user: true } });
     if (!driver) throw new NotFoundException('Driver not found');
 
     const stored = await this.storage.save(file.buffer, file.originalname, file.mimetype);
@@ -93,6 +95,8 @@ export class DriverDocumentsService {
       });
     }
     await this.documents.save(doc);
+    // notify Ops (security/admin) that a document is awaiting review
+    this.realtime.emitOps('document.pending', { driverId, driverName: driver.user?.fullName, docKey, docName: docType.nameEn });
     return {
       documentId: doc.id,
       key: docKey,

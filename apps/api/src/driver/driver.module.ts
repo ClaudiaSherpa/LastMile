@@ -8,9 +8,10 @@ import { DriverDocumentsService } from './driver-documents.service';
 import { DriverDocumentsController } from './driver-documents.controller';
 import { StorageService } from '../storage/storage.service';
 import { OcrService } from '../ocr/ocr.service';
+import { RealtimeModule } from '../realtime/realtime.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DriverProfile, Vehicle, AvailabilitySlot, OperatingArea, User, Document, DocumentType])],
+  imports: [TypeOrmModule.forFeature([DriverProfile, Vehicle, AvailabilitySlot, OperatingArea, User, Document, DocumentType]), RealtimeModule],
   controllers: [DriverProfileController, DriverAdminController, DriverDocumentsController],
   providers: [DriverProfileService, DriverDocumentsService, StorageService, OcrService],
 })
