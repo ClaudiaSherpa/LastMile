@@ -102,6 +102,11 @@ const toXY = (lng: number, lat: number) => ({
   x: Math.max(0, Math.min(100, ((lng - BARBADOS.minLng) / (BARBADOS.maxLng - BARBADOS.minLng)) * 100)),
   y: Math.max(0, Math.min(100, (1 - (lat - BARBADOS.minLat) / (BARBADOS.maxLat - BARBADOS.minLat)) * 100)),
 });
+// true width:height of the bounding box (longitude compressed by latitude), so
+// the map surface renders Barbados in proportion instead of stretched.
+const MAP_ASPECT =
+  ((BARBADOS.maxLng - BARBADOS.minLng) * Math.cos(((BARBADOS.minLat + BARBADOS.maxLat) / 2) * Math.PI / 180)) /
+  (BARBADOS.maxLat - BARBADOS.minLat);
 const tierColor: Record<string, string> = { elite: 'var(--brand)', preferente: 'var(--blue)', estandar: 'var(--ink-500)', nuevo: 'var(--amber)' };
 
 const waStatusBadge: Record<string, string> = { sent: 'badge-brand', received: 'badge-blue', failed: 'badge-red', skipped: 'badge-amber' };
@@ -1160,7 +1165,7 @@ function LiveMap({ role }: { role?: string }) {
         </span>
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div className="card" style={{ position: 'relative', flex: 1, minWidth: 260, height: 560, overflow: 'hidden', background: 'var(--surface-2, #eef3f5)' }}>
+        <div className="card" style={{ position: 'relative', width: 'min(100%, 460px)', aspectRatio: MAP_ASPECT, overflow: 'hidden', background: 'var(--surface-2, #eef3f5)' }}>
           <RoadsLayer />
           {list.map((d: any) => {
             const { x, y } = toXY(d.lng, d.lat);
