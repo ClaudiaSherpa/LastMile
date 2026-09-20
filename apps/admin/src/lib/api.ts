@@ -138,4 +138,15 @@ export const api = {
   whatsappMessages: () => request<any[]>('/whatsapp/messages'),
   whatsappSend: (to: string, text: string, driverId?: string) =>
     request<any>('/whatsapp/send', { method: 'POST', body: JSON.stringify({ to, text, driverId }) }),
+  // messaging + driver groups
+  sendDriverMessage: (driverId: string, text: string) =>
+    request<any>(`/messages/driver/${driverId}`, { method: 'POST', body: JSON.stringify({ text }) }),
+  broadcast: (text: string, groupId?: string) =>
+    request<any>('/messages/broadcast', { method: 'POST', body: JSON.stringify({ text, groupId }) }),
+  driverGroups: () => request<any[]>('/driver-groups'),
+  createGroup: (b: { name: string; color?: string; driverIds?: string[] }) =>
+    request<any>('/driver-groups', { method: 'POST', body: JSON.stringify(b) }),
+  updateGroup: (id: string, b: { name?: string; color?: string; driverIds?: string[] }) =>
+    request<any>(`/driver-groups/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  deleteGroup: (id: string) => request<any>(`/driver-groups/${id}`, { method: 'DELETE' }),
 };

@@ -111,16 +111,82 @@ const tierColor: Record<string, string> = { elite: 'var(--brand)', preferente: '
 
 const waStatusBadge: Record<string, string> = { sent: 'badge-brand', received: 'badge-blue', failed: 'badge-red', skipped: 'badge-amber' };
 
+function GroupsManager({ groups, onChanged }: { groups: any[]; onChanged: () => void }) {
+  const { t } = useI18n();
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [name, setName] = useState('');
+  const [members, setMembers] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.drivers().then(setDrivers).catch(() => {}); }, []);
+
+  const startNew = () => { setEditing({}); setName(''); setMembers([]); };
+  const startEdit = (g: any) => { setEditing(g); setName(g.name); setMembers(g.driverIds || []); };
+  const toggle = (id: string) => setMembers((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]));
+  const save = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      if (editing.id) await api.updateGroup(editing.id, { name: name.trim(), driverIds: members });
+      else await api.createGroup({ name: name.trim(), driverIds: members });
+      setEditing(null); onChanged();
+    } finally { setBusy(false); }
+  };
+  const del = async (g: any) => { if (!window.confirm(t(`¿Eliminar el grupo "${g.name}"?`, `Delete group "${g.name}"?`))) return; await api.deleteGroup(g.id); onChanged(); };
+
+  return (
+    <div className="card" style={{ padding: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span className="eyebrow">{t('Grupos de conductores', 'Driver groups')}</span>
+        {!editing && <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={startNew}>+ {t('Grupo', 'Group')}</button>}
+      </div>
+      {!editing && (groups.length ? (
+        <div style={{ display: 'grid', gap: 6 }}>
+          {groups.map((g) => (
+            <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+              <span className="badge badge-gray">{g.count}</span>
+              <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => startEdit(g)}>{t('Editar', 'Edit')}</button>
+              <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11, color: 'var(--red-ink, #d9342b)' }} onClick={() => del(g)}>✕</button>
+            </div>
+          ))}
+        </div>
+      ) : <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Aún no hay grupos.', 'No groups yet.')}</div>)}
+      {editing && (<>
+        <input className="input" placeholder={t('Nombre del grupo', 'Group name')} value={name} onChange={(e) => setName(e.target.value)} style={{ marginBottom: 8 }} />
+        <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 4 }}>{members.length} {t('seleccionados', 'selected')}</div>
+        <div style={{ maxHeight: 220, overflowY: 'auto', display: 'grid', gap: 4, marginBottom: 10, border: '1px solid var(--line)', borderRadius: 8, padding: 8 }}>
+          {drivers.map((d) => (
+            <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+              <input type="checkbox" checked={members.includes(d.id)} onChange={() => toggle(d.id)} />
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)' }}>{d.vehicle}</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>{t('Cancelar', 'Cancel')}</button>
+          <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy || !name.trim()} onClick={save}>{busy ? '…' : t('Guardar', 'Save')}</button>
+        </div>
+      </>)}
+    </div>
+  );
+}
+
 function Messages() {
   const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
+  const [mode, setMode] = useState<'direct' | 'broadcast'>('broadcast');
   const [to, setTo] = useState('');
   const [text, setText] = useState('');
+  const [target, setTarget] = useState('all'); // 'all' | groupId
+  const [groups, setGroups] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const { connected } = useRoom('ops');
 
-  useEffect(() => { api.whatsappMessages().then(setRows).catch(() => {}); }, []);
+  const loadGroups = useCallback(() => { api.driverGroups().then(setGroups).catch(() => {}); }, []);
+  useEffect(() => { api.whatsappMessages().then(setRows).catch(() => {}); loadGroups(); }, [loadGroups]);
   useEvent('whatsapp.message', useCallback((m: any) => {
     setRows((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
   }, []));
@@ -138,21 +204,56 @@ function Messages() {
     finally { setBusy(false); }
   };
 
+  const broadcast = async () => {
+    if (!text.trim()) return;
+    const grp = groups.find((g) => g.id === target);
+    const label = target === 'all' ? t('todos los conductores', 'all drivers') : grp?.name;
+    if (!window.confirm(t(`¿Enviar este mensaje a ${label}?`, `Send this message to ${label}?`))) return;
+    setBusy(true); setNote('');
+    try {
+      const r = await api.broadcast(text.trim(), target === 'all' ? undefined : target);
+      setText('');
+      setNote(t(`Difundido: ${r.sent} enviados, ${r.skipped} omitidos, ${r.failed} fallidos (de ${r.total}).`, `Broadcast: ${r.sent} sent, ${r.skipped} skipped, ${r.failed} failed (of ${r.total}).`));
+      api.whatsappMessages().then(setRows).catch(() => {});
+    } catch (e: any) { setNote(e.message); } finally { setBusy(false); }
+  };
+
+  const tabBtn = (m: 'direct' | 'broadcast', label: string) => (
+    <button onClick={() => { setMode(m); setNote(''); }} style={{ flex: 1, padding: '7px 0', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, background: mode === m ? 'var(--brand)' : 'var(--surface-2)', color: mode === m ? '#063' : 'var(--ink-600)' }}>{label}</button>
+  );
+
   return (
     <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      {/* composer */}
-      <div className="card" style={{ width: 340, maxWidth: '100%', flexShrink: 0, padding: 18 }}>
-        <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Enviar WhatsApp', 'Send WhatsApp')}</div>
-        <label className="field-label">{t('Número', 'Number')}</label>
-        <input className="input mono" value={to} onChange={(e) => setTo(e.target.value)} placeholder="+1 246 555 0100" style={{ marginBottom: 10 }} />
-        <label className="field-label">{t('Mensaje', 'Message')}</label>
-        <textarea className="textarea" rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Escribe un mensaje…', 'Type a message…')} style={{ marginBottom: 10 }} />
-        {note && <div className="badge badge-amber" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
-        <button className="btn btn-primary btn-block" disabled={busy || !to.trim() || !text.trim()} onClick={send}>{busy ? '…' : t('Enviar', 'Send')}</button>
+      {/* composer + groups */}
+      <div style={{ width: 340, maxWidth: '100%', flexShrink: 0, display: 'grid', gap: 16 }}>
+      <div className="card" style={{ padding: 18 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {tabBtn('broadcast', t('Difundir', 'Broadcast'))}
+          {tabBtn('direct', t('Directo', 'Direct'))}
+        </div>
+        {mode === 'direct' ? (<>
+          <label className="field-label">{t('Número', 'Number')}</label>
+          <input className="input mono" value={to} onChange={(e) => setTo(e.target.value)} placeholder="+1 246 555 0100" style={{ marginBottom: 10 }} />
+          <label className="field-label">{t('Mensaje', 'Message')}</label>
+          <textarea className="textarea" rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Escribe un mensaje…', 'Type a message…')} style={{ marginBottom: 10 }} />
+          {note && <div className="badge badge-amber" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+          <button className="btn btn-primary btn-block" disabled={busy || !to.trim() || !text.trim()} onClick={send}>{busy ? '…' : t('Enviar', 'Send')}</button>
+        </>) : (<>
+          <label className="field-label">{t('Destinatarios', 'Recipients')}</label>
+          <select className="input" value={target} onChange={(e) => setTarget(e.target.value)} style={{ marginBottom: 10 }}>
+            <option value="all">{t('Todos los conductores', 'All drivers')}</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
+          </select>
+          <label className="field-label">{t('Mensaje', 'Message')}</label>
+          <textarea className="textarea" rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Mensaje de difusión…', 'Broadcast message…')} style={{ marginBottom: 10 }} />
+          {note && <div className="badge badge-amber" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+          <button className="btn btn-primary btn-block" disabled={busy || !text.trim()} onClick={broadcast}>{busy ? '…' : t('Difundir por WhatsApp', 'Broadcast via WhatsApp')}</button>
+        </>)}
         <p style={{ fontSize: 11.5, color: 'var(--ink-500)', marginTop: 12, lineHeight: 1.45 }}>
-          {t('Requiere EVOLUTION_API_KEY y una instancia conectada. Los mensajes entrantes llegan por webhook.',
-             'Requires EVOLUTION_API_KEY and a connected instance. Inbound messages arrive via webhook.')}
+          {t('Requiere EVOLUTION_API_KEY y una instancia conectada.', 'Requires EVOLUTION_API_KEY and a connected instance.')}
         </p>
+      </div>
+      <GroupsManager groups={groups} onChanged={loadGroups} />
       </div>
 
       {/* log */}
@@ -824,7 +925,22 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
   const [viewDoc, setViewDoc] = useState<{ id: string; name: string } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [reload, setReload] = useState(0);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [msgText, setMsgText] = useState('');
+  const [msgBusy, setMsgBusy] = useState(false);
+  const [msgNote, setMsgNote] = useState('');
   const canEdit = role === 'admin' || role === 'security_officer';
+  const canMessage = role === 'admin' || role === 'dispatcher';
+
+  const sendMsg = async () => {
+    if (!msgText.trim()) return;
+    setMsgBusy(true); setMsgNote('');
+    try {
+      const r = await api.sendDriverMessage(driverId, msgText.trim());
+      setMsgText('');
+      setMsgNote(r.status === 'sent' ? t('Enviado ✓', 'Sent ✓') : r.status === 'skipped' ? t('Registrado (WhatsApp no configurado)', 'Logged (WhatsApp not configured)') : t('Falló el envío', 'Send failed'));
+    } catch (e: any) { setMsgNote(e.message); } finally { setMsgBusy(false); }
+  };
 
   useEffect(() => {
     let live = true;
@@ -846,10 +962,25 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
       </div>
       {name && <div style={{ fontWeight: 600, fontSize: 15.5, marginTop: 6 }}>{name}</div>}
       {sub && <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>{sub}</div>}
-      {canEdit && (
-        <button className="btn btn-ghost" style={{ marginTop: 8, padding: '5px 12px', fontSize: 12.5 }} onClick={() => setEditOpen(true)}>
-          ✎ {t('Editar datos', 'Edit driver')}
-        </button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        {canEdit && (
+          <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => setEditOpen(true)}>
+            ✎ {t('Editar datos', 'Edit driver')}
+          </button>
+        )}
+        {canMessage && docs?.driver?.phone && (
+          <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => { setMsgOpen((o) => !o); setMsgNote(''); }}>
+            💬 {t('Mensaje', 'Message')}
+          </button>
+        )}
+      </div>
+      {msgOpen && canMessage && (
+        <div style={{ marginTop: 10, padding: 12, background: 'var(--surface-2)', borderRadius: 10 }}>
+          <textarea className="textarea" rows={3} value={msgText} onChange={(e) => setMsgText(e.target.value)}
+            placeholder={t('Mensaje por WhatsApp…', 'WhatsApp message…')} style={{ width: '100%', marginBottom: 8 }} />
+          {msgNote && <div style={{ fontSize: 12, color: 'var(--ink-600)', marginBottom: 8 }}>{msgNote}</div>}
+          <button className="btn btn-primary btn-block" disabled={msgBusy || !msgText.trim()} onClick={sendMsg}>{msgBusy ? '…' : t('Enviar WhatsApp', 'Send WhatsApp')}</button>
+        </div>
       )}
       {docs?.driver?.phone && (
         <div style={{ marginTop: 6, fontSize: 13 }}>
@@ -1206,6 +1337,7 @@ function DayPlanTable() {
 
   const rows: any[] = data?.rows ?? [];
   const totalPkgs = rows.reduce((s, r) => s + (r.packages || 0), 0);
+  const driverCount = new Set(rows.map((r) => r.driverId)).size;
 
   return (
     <div className="card" style={{ flex: 1, minWidth: 300, padding: 16, alignSelf: 'stretch' }}>
@@ -1214,7 +1346,7 @@ function DayPlanTable() {
         <input className="input mono" type="date" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
       <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 10 }}>
-        {rows.length} {t('conductores', 'drivers')} · {totalPkgs} {t('paquetes', 'packages')}
+        {driverCount} {t('conductores', 'drivers')} · {rows.length} {t('asignaciones', 'assignments')} · {totalPkgs} {t('paquetes', 'packages')}
         {data?.plans?.length ? ` · ${data.plans.map((p: any) => p.reference).join(', ')}` : ''}
       </div>
       {rows.length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-500)', padding: '14px 0' }}>{t('No hay plan para esta fecha.', 'No plan for this date.')}</div>}
@@ -1224,18 +1356,24 @@ function DayPlanTable() {
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--ink-500)' }}>
                 <th style={{ padding: '6px 8px' }}>{t('Conductor', 'Driver')}</th>
+                <th style={{ padding: '6px 8px' }}>{t('Plan', 'Plan')}</th>
                 <th style={{ padding: '6px 8px' }}>{t('Parroquia', 'Parish')}</th>
                 <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('Paquetes', 'Packages')}</th>
                 <th style={{ padding: '6px 8px' }}>{t('Estado', 'Status')}</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} style={{ borderTop: '1px solid var(--line)' }}>
+              {rows.map((r, i) => {
+                const firstOfDriver = i === 0 || rows[i - 1].driverId !== r.driverId;
+                return (
+                <tr key={i} style={{ borderTop: firstOfDriver ? '1px solid var(--line)' : '1px solid var(--surface-2)' }}>
                   <td style={{ padding: '8px' }}>
-                    <div style={{ fontWeight: 600 }}>{r.driver}{r.preassigned ? ' ★' : ''}</div>
-                    {r.vehicle && <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)' }}>{r.vehicle}</div>}
+                    {firstOfDriver ? (<>
+                      <div style={{ fontWeight: 600 }}>{r.driver}{r.preassigned ? ' ★' : ''}</div>
+                      {r.vehicle && <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)' }}>{r.vehicle}</div>}
+                    </>) : <span style={{ color: 'var(--ink-300)' }}>↳</span>}
                   </td>
+                  <td style={{ padding: '8px' }}><span className="mono" style={{ fontSize: 11.5 }}>{r.planReference}</span></td>
                   <td style={{ padding: '8px' }}>{prettyParish(r.parish)}</td>
                   <td style={{ padding: '8px', textAlign: 'right' }}>
                     <span className="mono" style={{ fontWeight: 600 }}>{r.packages}</span>
@@ -1245,7 +1383,7 @@ function DayPlanTable() {
                   </td>
                   <td style={{ padding: '8px' }}><span className={`badge ${dayStatusBadge[r.status] || 'badge-gray'}`}>{r.status}</span></td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
@@ -1320,11 +1458,31 @@ function Drivers({ role }: { role?: string }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
   const [sel, setSel] = useState<any>(null);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [groupFilter, setGroupFilter] = useState('all');
   const loadDrivers = useCallback(() => { api.drivers().then(setRows).catch(() => {}); }, []);
-  useEffect(() => { loadDrivers(); }, [loadDrivers]);
+  useEffect(() => { loadDrivers(); api.driverGroups().then(setGroups).catch(() => {}); }, [loadDrivers]);
+
+  // driverId -> groups it belongs to
+  const groupsByDriver = useMemo(() => {
+    const m: Record<string, any[]> = {};
+    for (const g of groups) for (const id of g.driverIds || []) (m[id] = m[id] || []).push(g);
+    return m;
+  }, [groups]);
+  const activeGroup = groups.find((g) => g.id === groupFilter);
+  const shown = groupFilter === 'all' ? rows : rows.filter((d) => (activeGroup?.driverIds || []).includes(d.id));
+
   return (
     <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
       <div className="card" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--line)' }}>
+          <span className="eyebrow">{t('Filtrar por grupo', 'Filter by group')}</span>
+          <select className="input" style={{ width: 200 }} value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
+            <option value="all">{t('Todos', 'All')} ({rows.length})</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
+          </select>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{shown.length} {t('mostrados', 'shown')}</span>
+        </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--ink-500)', background: 'var(--surface-2)' }}>
@@ -1338,12 +1496,17 @@ function Drivers({ role }: { role?: string }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((d) => (
+            {shown.map((d) => (
               <tr key={d.id} onClick={() => setSel(d)}
                 style={{ borderTop: '1px solid var(--line)', cursor: 'pointer',
                   background: sel?.id === d.id ? 'var(--brand-tint)' : undefined }}>
                 <td style={{ padding: '12px 16px', fontWeight: 600 }}>{d.name}
                   <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', fontWeight: 400 }}>{d.plate}{d.phone ? ` · ${d.phone}` : ''}</div>
+                  {(groupsByDriver[d.id] || []).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+                      {(groupsByDriver[d.id] || []).map((g: any) => <span key={g.id} className="badge badge-blue" style={{ fontSize: 10 }}>{g.name}</span>)}
+                    </div>
+                  )}
                 </td>
                 <td style={{ padding: '12px 16px' }}>{d.vehicle}</td>
                 <td style={{ padding: '12px 16px' }}><span className={`badge ${tierBadge[d.tier] || 'badge-gray'}`}>{d.tier}</span></td>

@@ -530,9 +530,16 @@ export class DeliveryPlanService {
         }
       }
     }
-    // accepted/started drivers first, then by parish
-    const rank = (r: any) => (['delivered'].includes(r.status) ? 3 : r.picked || ['en_route', 'picked_up', 'en_route_pickup'].includes(r.status) ? 0 : ['accepted', 'auto_accepted'].includes(r.tenderStatus) ? 1 : 2);
-    rows.sort((a, b) => rank(a) - rank(b) || a.parish.localeCompare(b.parish));
+    // group each driver's assignments together (active drivers first), then by plan
+    const rank = (r: any) => (r.picked || ['en_route', 'picked_up', 'en_route_pickup'].includes(r.status) ? 0 : ['accepted', 'auto_accepted'].includes(r.tenderStatus) ? 1 : ['delivered'].includes(r.status) ? 2 : 3);
+    const drank = new Map<string, number>();
+    for (const r of rows) { const cur = drank.get(r.driverId); const v = rank(r); if (cur == null || v < cur) drank.set(r.driverId, v); }
+    rows.sort((a, b) =>
+      (drank.get(a.driverId)! - drank.get(b.driverId)!) ||
+      (a.driver || '').localeCompare(b.driver || '') ||
+      a.driverId?.localeCompare(b.driverId) ||
+      (a.planReference || '').localeCompare(b.planReference || ''),
+    );
     return {
       date: day,
       plans: plans.map((p) => ({ id: p.id, reference: p.reference, name: p.name, status: p.status })),
