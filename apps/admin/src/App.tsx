@@ -864,6 +864,32 @@ function DriverStatsPanel({ driverId, name, sub, onClose }: { driverId: string; 
   );
 }
 
+// Barbados road network (from "Barbados Roads.kmz"), projected with the same
+// box as toXY. Lazy-loaded so it doesn't weigh down the initial bundle.
+function RoadsLayer() {
+  const [roads, setRoads] = useState<{ major: string; medium: string; minor: string; vb: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    import('./assets/barbados-roads')
+      .then((m) => { if (live) setRoads({ ...m.ROADS, vb: m.ROADS_VIEWBOX }); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  if (!roads) return null;
+  const line = (d: string, stroke: string, w: number, o = 1) => (
+    <path d={d} fill="none" stroke={stroke} strokeWidth={w} opacity={o}
+      vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+  );
+  return (
+    <svg viewBox={`0 0 ${roads.vb} ${roads.vb}`} preserveAspectRatio="none"
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden>
+      {line(roads.minor, 'var(--ink-400, #9fb0b8)', 0.5, 0.5)}
+      {line(roads.medium, 'var(--ink-500, #6b7d86)', 0.9, 0.75)}
+      {line(roads.major, 'var(--ink-700, #45555d)', 1.5, 0.9)}
+    </svg>
+  );
+}
+
 function LiveMap() {
   const { t } = useI18n();
   const [drivers, setDrivers] = useState<Record<string, any>>({});
@@ -896,7 +922,8 @@ function LiveMap() {
         </span>
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div className="card map-grid" style={{ position: 'relative', flex: 1, minWidth: 260, height: 560, overflow: 'hidden' }}>
+        <div className="card" style={{ position: 'relative', flex: 1, minWidth: 260, height: 560, overflow: 'hidden', background: 'var(--surface-2, #eef3f5)' }}>
+          <RoadsLayer />
           {list.map((d: any) => {
             const { x, y } = toXY(d.lng, d.lat);
             const on = selected === d.id;
