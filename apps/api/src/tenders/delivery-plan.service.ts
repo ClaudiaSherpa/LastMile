@@ -32,7 +32,8 @@ import { env } from '../config/env';
 export interface PlanLineInput {
   parish: string;
   packages: number;
-  preassigned?: string[]; // driver emails or phones
+  preassigned?: string[]; // driver ids, emails or phones
+  preassignedPackages?: Record<string, number>; // driverId -> packages (from the Excel template)
 }
 export interface CreatePlanInput {
   name?: string;
@@ -127,12 +128,23 @@ export class DeliveryPlanService {
     for (const l of input.lines) {
       if (!l.parish || !(l.packages > 0)) throw new BadRequestException(`Invalid line: ${JSON.stringify(l)}`);
       const preassignedDriverIds = await this.resolveDrivers(l.preassigned ?? []);
+      // keep per-driver quantities only for resolved drivers
+      let preassignedPackages: Record<string, number> | undefined;
+      if (l.preassignedPackages) {
+        preassignedPackages = {};
+        for (const id of preassignedDriverIds) {
+          const q = l.preassignedPackages[id];
+          if (q != null && q > 0) preassignedPackages[id] = Math.round(q);
+        }
+        if (!Object.keys(preassignedPackages).length) preassignedPackages = undefined;
+      }
       await this.lines.save(
         this.lines.create({
           plan,
           parish: l.parish,
           requiredPackages: Math.round(l.packages),
           preassignedDriverIds,
+          preassignedPackages,
           status: PlanLineStatus.PENDING,
         }),
       );
@@ -194,8 +206,8 @@ export class DeliveryPlanService {
       // 1) pre-assigned drivers auto-accept their vehicle capacity
       for (const drvId of line.preassignedDriverIds ?? []) {
         const c = byId.get(drvId);
-        const cap = this.capacityOf(plan, c?.vehicle);
-        if (!c || cap <= 0) { this.logger.warn(`preassigned ${drvId} has no usable vehicle`); continue; }
+        const cap = line.preassignedPackages?.[drvId] ?? this.capacityOf(plan, c?.vehicle);
+        if (!c || cap <= 0) { this.logger.warn(`preassigned ${drvId} has no usable vehicle/quantity`); continue; }
         await this.tenders.save(
           this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }),
         );
@@ -268,7 +280,7 @@ export class DeliveryPlanService {
       for (const drvId of line.preassignedDriverIds ?? []) {
         if (seen.has(drvId)) continue;
         const c = byId.get(drvId);
-        const cap = this.capacityOf(plan, c?.vehicle);
+        const cap = line.preassignedPackages?.[drvId] ?? this.capacityOf(plan, c?.vehicle);
         if (!c || cap <= 0) continue;
         await this.tenders.save(this.tenders.create({ line, driver: { id: drvId } as DriverProfile, packages: cap, preassigned: true, status: PlanTenderStatus.AUTO_ACCEPTED, respondedAt: new Date() }));
         line.acceptedPackages += cap;

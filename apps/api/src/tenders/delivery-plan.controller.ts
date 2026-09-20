@@ -9,6 +9,7 @@ class PlanLineDto {
   @IsString() parish: string;
   @IsInt() @Min(1) packages: number;
   @IsOptional() @IsArray() @IsString({ each: true }) preassigned?: string[];
+  @IsOptional() preassignedPackages?: Record<string, number>;
 }
 class CreatePlanDto {
   @IsOptional() @IsString() name?: string;

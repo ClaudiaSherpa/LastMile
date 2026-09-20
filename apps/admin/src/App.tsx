@@ -319,13 +319,56 @@ function DeliveryPlans() {
     return z?.slug || v;
   };
 
+  // download an Excel template listing active drivers, for the dispatcher to fill
+  // a Parish + Packages per driver, then re-upload to build a pre-assigned plan.
+  const downloadTemplate = () => {
+    const drivers = (elig.length ? elig : []).map((d) => ({
+      ID: d.id, Driver: d.name, Vehicle: d.vehicle || '', Plate: d.plate || '', Parish: '', Packages: '',
+    }));
+    const parishes = zones.map((z) => ({ Parish: lang === 'es' ? z.nameEs : z.nameEn, Slug: z.slug }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(drivers.length ? drivers : [{ ID: '', Driver: '', Vehicle: '', Plate: '', Parish: '', Packages: '' }]);
+    ws['!cols'] = [{ wch: 38 }, { wch: 22 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Plan');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(parishes), 'Parishes');
+    XLSX.writeFile(wb, `PasarEx-plan-template-${opDate || new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const json: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      // prefer the "Plan" sheet (from our template), else the first sheet
+      const sheetName = wb.SheetNames.find((n) => n.toLowerCase() === 'plan') || wb.SheetNames[0];
+      const json: any[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
       const get = (r: any, keys: string[]) => { const k = Object.keys(r).find((kk) => keys.includes(kk.toLowerCase().trim())); return k ? r[k] : ''; };
+      const keys = Object.keys(json[0] || {}).map((k) => k.toLowerCase().trim());
+      const isDriverTemplate = keys.some((k) => ['id', 'driverid', 'driver', 'conductor'].includes(k)) && keys.includes('parish');
+
+      if (isDriverTemplate) {
+        // per-driver rows -> group by parish, pre-assign each driver with their quantity
+        const map: Record<string, { packages: number; preassigned: string[]; preassignedPackages: Record<string, number> }> = {};
+        let assigned = 0;
+        for (const r of json) {
+          const parish = zoneSlug(get(r, ['parish', 'zone', 'zona']));
+          const pkg = parseInt(String(get(r, ['packages', 'quantity', 'qty', 'paquetes'])), 10) || 0;
+          const ident = String(get(r, ['id', 'driverid']) || get(r, ['phone', 'celular']) || '').trim();
+          if (!parish || pkg <= 0 || !ident) continue;
+          const m = map[parish] || (map[parish] = { packages: 0, preassigned: [], preassignedPackages: {} });
+          m.packages += pkg;
+          if (!m.preassigned.includes(ident)) m.preassigned.push(ident);
+          m.preassignedPackages[ident] = (m.preassignedPackages[ident] || 0) + pkg;
+          assigned++;
+        }
+        const parsed = Object.entries(map).map(([parish, m]) => ({ parish, packages: m.packages, preassigned: m.preassigned, preassignedPackages: m.preassignedPackages }));
+        if (!parsed.length) { setNote(t('Ningún conductor con parroquia y paquetes. Llena Parish y Packages.', 'No driver rows with a parish + packages. Fill Parish and Packages.')); return; }
+        setRows(parsed);
+        setNote(t(`${assigned} conductores pre-asignados en ${parsed.length} parroquias.`, `${assigned} drivers pre-assigned across ${parsed.length} parishes.`));
+        return;
+      }
+
+      // legacy parish/packages/preassigned rows
       const parsed = json.map((r) => ({
         parish: zoneSlug(get(r, ['parish', 'zone', 'zona'])),
         packages: parseInt(String(get(r, ['packages', 'quantity', 'qty', 'paquetes'])), 10) || 0,
@@ -344,6 +387,7 @@ function DeliveryPlans() {
     const lines = rows.filter((r) => r.parish && r.packages > 0).map((r) => ({
       parish: r.parish, packages: Number(r.packages),
       preassigned: Array.isArray(r.preassigned) ? r.preassigned : String(r.preassigned || '').split(/[;,]/).map((s: string) => s.trim()).filter(Boolean),
+      ...(r.preassignedPackages ? { preassignedPackages: r.preassignedPackages } : {}),
     }));
     if (!lines.length) { setNote(t('Agrega al menos una parroquia con paquetes.', 'Add at least one parish with packages.')); return; }
     setBusy('create'); setNote('');
@@ -365,8 +409,9 @@ function DeliveryPlans() {
         <div className="card" style={{ padding: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <span className="eyebrow">{t('Nuevo plan de entrega', 'New delivery plan')} · {t('Recogida', 'Pickup')}: PasarEx Hub</span>
-            <div>
+            <div style={{ display: 'flex', gap: 8 }}>
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={onFile} />
+              <button className="btn btn-ghost" style={{ padding: '6px 12px' }} onClick={downloadTemplate} title={t('Plantilla Excel con conductores activos', 'Excel template with active drivers')}>⬇ {t('Plantilla', 'Template')}</button>
               <button className="btn btn-ghost" style={{ padding: '6px 12px' }} onClick={() => fileRef.current?.click()}>{t('Subir CSV/Excel', 'Upload CSV/Excel')}</button>
             </div>
           </div>

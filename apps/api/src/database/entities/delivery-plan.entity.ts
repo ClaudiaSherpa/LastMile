@@ -75,6 +75,11 @@ export class DeliveryPlanLine {
   @Column({ type: 'jsonb', default: () => `'[]'` })
   preassignedDriverIds: string[];
 
+  // optional per-driver package quantity for pre-assigned drivers (from the
+  // Excel driver template); falls back to the driver's vehicle capacity.
+  @Column({ type: 'jsonb', nullable: true })
+  preassignedPackages?: Record<string, number>;
+
   // eligible-driver count at broadcast (drives scarcest-first ordering)
   @Column({ type: 'int', default: 0 })
   eligibleCount: number;
