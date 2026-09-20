@@ -883,8 +883,8 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
         : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <StatTile label={t('Éxito entrega', 'Delivery success')} value={dayStats.successRate != null ? `${dayStats.successRate}%` : '—'} accent="var(--brand-ink)" />
-            <StatTile label={t('Entregados', 'Delivered')} value={dayStats.successfulDeliveries} accent="var(--ink-900)" />
-            <StatTile label={t('Devueltos', 'Returned')} value={dayStats.packagesReturned} accent="var(--red-ink)" />
+            <StatTile label={t('Paq. entregados', 'Pkgs delivered')} value={dayStats.successfulDeliveries} accent="var(--ink-900)" />
+            <StatTile label={t('Paq. devueltos', 'Pkgs returned')} value={dayStats.packagesReturned} accent="var(--red-ink)" />
             <StatTile label={t('Millaje total', 'Total mileage')} value={dayStats.mileage} accent="var(--blue-ink)" />
           </div>
         ))}

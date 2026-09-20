@@ -664,7 +664,7 @@ function DaySheet() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {cell(t('Hora de regreso', 'Return time'), timeIn('ret'))}
         {cell(t('Millaje final', 'End mileage'), numIn('endKm'))}
-        {cell(t('Entregas exitosas', 'Successful deliveries'), numIn('success'))}
+        {cell(t('Paquetes entregados', 'Packages delivered'), numIn('success'))}
         {cell(t('Paquetes devueltos', 'Packages returned'), numIn('returned'))}
       </div>
       <button className="btn btn-ghost btn-block" disabled={busy === 'out'} onClick={checkOut}>{busy === 'out' ? '…' : t('Guardar fin del día', 'Save end of day')}</button>
