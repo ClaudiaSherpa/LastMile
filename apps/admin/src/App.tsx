@@ -190,7 +190,8 @@ const planLineBadge: Record<string, string> = { pending: 'badge-gray', broadcast
 function DeliveryPlans() {
   const { t, lang } = useI18n();
   const [zones, setZones] = useState<any[]>([]);
-  const [rows, setRows] = useState<any[]>([{ parish: '', packages: 100, preassigned: '' }]);
+  const [elig, setElig] = useState<any[]>([]);
+  const [rows, setRows] = useState<any[]>([{ parish: '', packages: 100, preassigned: [] }]);
   const [caps, setCaps] = useState<Record<string, number>>({ van: 120, carro: 80, moto: 50, camioneta: 150, bici: 20 });
   const [name, setName] = useState('');
   const [opDate, setOpDate] = useState<string>(() => new Date(Date.now() + 86400000).toISOString().slice(0, 10)); // default tomorrow
@@ -203,7 +204,7 @@ function DeliveryPlans() {
   const { connected } = useRoom('ops');
 
   const loadPlans = () => api.plans().then(setPlans).catch(() => {});
-  useEffect(() => { api.zones().then(setZones).catch(() => {}); loadPlans(); }, []);
+  useEffect(() => { api.zones().then(setZones).catch(() => {}); api.eligibleDrivers().then(setElig).catch(() => {}); loadPlans(); }, []);
   const openPlan = (id: string) => api.plan(id).then(setSel).catch(() => {});
 
   // live refresh the monitored plan
@@ -227,7 +228,7 @@ function DeliveryPlans() {
       const parsed = json.map((r) => ({
         parish: zoneSlug(get(r, ['parish', 'zone', 'zona'])),
         packages: parseInt(String(get(r, ['packages', 'quantity', 'qty', 'paquetes'])), 10) || 0,
-        preassigned: String(get(r, ['preassigned', 'drivers', 'conductores']) || '').split(/[;,]/).map((s) => s.trim()).filter(Boolean).join(', '),
+        preassigned: String(get(r, ['preassigned', 'drivers', 'conductores']) || '').split(/[;,]/).map((s) => s.trim()).filter(Boolean),
       })).filter((l) => l.packages > 0);
       if (!parsed.length) { setNote(t('No se encontraron filas válidas (columnas: parish, packages, preassigned).', 'No valid rows found (columns: parish, packages, preassigned).')); return; }
       setRows(parsed); setNote(t(`${parsed.length} filas cargadas del archivo.`, `${parsed.length} rows loaded from file.`));
@@ -235,13 +236,13 @@ function DeliveryPlans() {
   };
 
   const setRow = (i: number, patch: any) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const addRow = () => setRows((rs) => [...rs, { parish: '', packages: 100, preassigned: '' }]);
+  const addRow = () => setRows((rs) => [...rs, { parish: '', packages: 100, preassigned: [] }]);
   const delRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
   const create = async () => {
     const lines = rows.filter((r) => r.parish && r.packages > 0).map((r) => ({
       parish: r.parish, packages: Number(r.packages),
-      preassigned: String(r.preassigned || '').split(/[;,]/).map((s: string) => s.trim()).filter(Boolean),
+      preassigned: Array.isArray(r.preassigned) ? r.preassigned : String(r.preassigned || '').split(/[;,]/).map((s: string) => s.trim()).filter(Boolean),
     }));
     if (!lines.length) { setNote(t('Agrega al menos una parroquia con paquetes.', 'Add at least one parish with packages.')); return; }
     setBusy('create'); setNote('');
@@ -279,7 +280,7 @@ function DeliveryPlans() {
               <thead><tr style={{ textAlign: 'left', color: 'var(--ink-500)' }}>
                 <th style={{ padding: '4px 6px' }}>{t('Parroquia', 'Parish')}</th>
                 <th style={{ padding: '4px 6px', width: 90 }}>{t('Paquetes', 'Packages')}</th>
-                <th style={{ padding: '4px 6px' }}>{t('Pre-asignados (correos/teléfonos)', 'Pre-assigned (emails/phones)')}</th>
+                <th style={{ padding: '4px 6px' }}>{t('Pre-asignar conductores', 'Pre-assign drivers')}</th>
                 <th></th>
               </tr></thead>
               <tbody>
@@ -292,7 +293,28 @@ function DeliveryPlans() {
                       </select>
                     </td>
                     <td style={{ padding: '3px 6px' }}><input className="input mono" type="number" value={r.packages} onChange={(e) => setRow(i, { packages: e.target.value })} /></td>
-                    <td style={{ padding: '3px 6px' }}><input className="input" placeholder={t('opcional', 'optional')} value={r.preassigned} onChange={(e) => setRow(i, { preassigned: e.target.value })} /></td>
+                    <td style={{ padding: '3px 6px', minWidth: 190 }}>
+                      <select className="select" value="" onChange={(e) => { const id = e.target.value; if (id && !(r.preassigned || []).includes(id)) setRow(i, { preassigned: [...(r.preassigned || []), id] }); }}>
+                        <option value="">{elig.length ? t('+ conductor elegible', '+ eligible driver') : t('(sin conductores elegibles)', '(no eligible drivers)')}</option>
+                        {elig.filter((d) => !(r.preassigned || []).includes(d.id)).map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}{d.vehicle ? ` · ${d.vehicle}` : ''}</option>
+                        ))}
+                      </select>
+                      {(r.preassigned || []).length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                          {(r.preassigned || []).map((id: string) => {
+                            const d = elig.find((x) => x.id === id);
+                            return (
+                              <span key={id} className="badge badge-amber" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                {d ? d.name : id}
+                                <button onClick={() => setRow(i, { preassigned: (r.preassigned || []).filter((x: string) => x !== id) })}
+                                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 11 }}>✕</button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '3px 6px' }}><button className="btn btn-ghost" style={{ padding: '4px 9px' }} onClick={() => delRow(i)}>✕</button></td>
                   </tr>
                 ))}
@@ -1133,6 +1155,75 @@ function RoadsLayer() {
   );
 }
 
+// The day's plan for the live map: every driver on a plan for the chosen date,
+// with parish, package count (actual once picked up, else the tendered/capacity
+// number) and status. Updates live on broadcast/accept.
+const prettyParish = (slug: string) => (slug || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const dayStatusBadge: Record<string, string> = {
+  delivered: 'badge-brand', en_route: 'badge-blue', picked_up: 'badge-blue', en_route_pickup: 'badge-blue',
+  accepted: 'badge-brand', auto_accepted: 'badge-brand', assigned: 'badge-gray',
+  offered: 'badge-amber', declined: 'badge-gray', cancelled: 'badge-red', failed: 'badge-red',
+};
+
+function DayPlanTable() {
+  const { t } = useI18n();
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState<any>(null);
+  const load = useCallback(() => { api.dayPlan(date).then(setData).catch(() => setData(null)); }, [date]);
+  useEffect(() => { load(); }, [load]);
+  useEvent('plan.tender.accepted', useCallback(() => load(), [load]));
+  useEvent('plan.broadcast', useCallback(() => load(), [load]));
+
+  const rows: any[] = data?.rows ?? [];
+  const totalPkgs = rows.reduce((s, r) => s + (r.packages || 0), 0);
+
+  return (
+    <div className="card" style={{ flex: 1, minWidth: 300, padding: 16, alignSelf: 'stretch' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+        <span className="eyebrow">{t('Plan del día', "Day's plan")}</span>
+        <input className="input mono" type="date" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 10 }}>
+        {rows.length} {t('conductores', 'drivers')} · {totalPkgs} {t('paquetes', 'packages')}
+        {data?.plans?.length ? ` · ${data.plans.map((p: any) => p.reference).join(', ')}` : ''}
+      </div>
+      {rows.length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-500)', padding: '14px 0' }}>{t('No hay plan para esta fecha.', 'No plan for this date.')}</div>}
+      {rows.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--ink-500)' }}>
+                <th style={{ padding: '6px 8px' }}>{t('Conductor', 'Driver')}</th>
+                <th style={{ padding: '6px 8px' }}>{t('Parroquia', 'Parish')}</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('Paquetes', 'Packages')}</th>
+                <th style={{ padding: '6px 8px' }}>{t('Estado', 'Status')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} style={{ borderTop: '1px solid var(--line)' }}>
+                  <td style={{ padding: '8px' }}>
+                    <div style={{ fontWeight: 600 }}>{r.driver}{r.preassigned ? ' ★' : ''}</div>
+                    {r.vehicle && <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)' }}>{r.vehicle}</div>}
+                  </td>
+                  <td style={{ padding: '8px' }}>{prettyParish(r.parish)}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>
+                    <span className="mono" style={{ fontWeight: 600 }}>{r.packages}</span>
+                    <div style={{ fontSize: 10, color: r.picked ? 'var(--brand-ink)' : 'var(--ink-400)' }}>
+                      {r.picked ? t('recogidos', 'picked up') : t('asignados', 'assigned')}
+                    </div>
+                  </td>
+                  <td style={{ padding: '8px' }}><span className={`badge ${dayStatusBadge[r.status] || 'badge-gray'}`}>{r.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LiveMap({ role }: { role?: string }) {
   const { t } = useI18n();
   const [drivers, setDrivers] = useState<Record<string, any>>({});
@@ -1182,11 +1273,14 @@ function LiveMap({ role }: { role?: string }) {
           })}
           {!list.length && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--ink-500)' }}>{t('Sin conductores activos', 'No active drivers')}</div>}
         </div>
-        {selected && drivers[selected] && (
-          <DriverStatsPanel driverId={selected} name={drivers[selected].name}
-            sub={[drivers[selected].vehicle, drivers[selected].tier].filter(Boolean).join(' · ')}
-            role={role} onClose={() => setSelected(null)} />
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minWidth: 300 }}>
+          {selected && drivers[selected] && (
+            <DriverStatsPanel driverId={selected} name={drivers[selected].name}
+              sub={[drivers[selected].vehicle, drivers[selected].tier].filter(Boolean).join(' · ')}
+              role={role} onClose={() => setSelected(null)} />
+          )}
+          <DayPlanTable />
+        </div>
       </div>
     </div>
   );

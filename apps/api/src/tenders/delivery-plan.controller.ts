@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
 import { IsArray, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Role, JwtPayload } from '@sherpa/shared';
@@ -32,6 +32,20 @@ export class DeliveryPlanController {
   @Roles(Role.ADMIN, Role.DISPATCHER)
   list() {
     return this.plans.list();
+  }
+
+  /** Eligible drivers for the pre-assign picker. */
+  @Get('delivery-plans/eligible-drivers')
+  @Roles(Role.ADMIN, Role.DISPATCHER)
+  eligibleDrivers() {
+    return this.plans.eligibleDrivers();
+  }
+
+  /** The day's plan for the live map: drivers, parish, packages and status. */
+  @Get('delivery-plans/day')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  dayPlan(@Query('date') date?: string) {
+    return this.plans.dayPlan(date);
   }
 
   @Get('delivery-plans/:id')

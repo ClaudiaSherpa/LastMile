@@ -128,6 +128,8 @@ export const api = {
   // ── delivery plans ──
   plans: () => request<any[]>('/delivery-plans'),
   plan: (id: string) => request<any>(`/delivery-plans/${id}`),
+  eligibleDrivers: () => request<any[]>('/delivery-plans/eligible-drivers'),
+  dayPlan: (date?: string) => request<any>(`/delivery-plans/day${date ? `?date=${date}` : ''}`),
   createPlan: (b: any) => request<any>('/delivery-plans', { method: 'POST', body: JSON.stringify(b) }),
   broadcastPlan: (id: string) => request<any>(`/delivery-plans/${id}/broadcast`, { method: 'POST' }),
   // ── WhatsApp (Evolution) ──
