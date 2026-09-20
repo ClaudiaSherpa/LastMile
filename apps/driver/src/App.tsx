@@ -222,7 +222,7 @@ function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | vo
 }
 
 // ── pending review ──────────────────────────────────────────────
-function Pending({ app, onReset }: { app: any; onReset: () => void }) {
+function Pending({ app, onReset, onSignIn }: { app: any; onReset: () => void; onSignIn: () => void }) {
   const { t } = useI18n();
   return (
     <Phone>
@@ -243,7 +243,11 @@ function Pending({ app, onReset }: { app: any; onReset: () => void }) {
             <span className="badge badge-amber">{t('En revisión', 'In review')}</span>
           </div>
         </div>
-        <button className="btn btn-ghost btn-block" style={{ marginTop: 'auto' }} onClick={onReset}>{t('Nueva solicitud', 'New application')}</button>
+        <p style={{ fontSize: 12.5, color: 'var(--ink-500)', marginTop: 20 }}>
+          {t('¿Ya fuiste aprobado? Inicia sesión con tu celular y contraseña.', 'Already approved? Sign in with your mobile and password.')}
+        </p>
+        <button className="btn btn-primary btn-block" style={{ marginTop: 'auto' }} onClick={onSignIn}>{t('Iniciar sesión', 'Sign in')}</button>
+        <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={onReset}>{t('Nueva solicitud', 'New application')}</button>
       </div>
     </Phone>
   );
@@ -950,8 +954,11 @@ export function App() {
     if (!s) { setView('welcome'); return; }
     api.get(s.id, s.token)
       .then((app) => {
+        // once approved, onboarding is done — the driver signs in with phone + password.
+        // clear the stale onboarding session so it stops resuming into "under review".
+        if (app.status === 'approved') { session.clear(); setView('login'); return; }
         setRef(s);
-        if (app.status === 'in_review' || app.status === 'approved') { setSubmitted(app); setView('pending'); }
+        if (app.status === 'in_review') { setSubmitted(app); setView('pending'); }
         else { setDraft(app.draft); setView('wizard'); }
       })
       .catch(() => { session.clear(); setView('welcome'); });
@@ -985,14 +992,14 @@ export function App() {
       {view === 'loading' && <Phone><div /></Phone>}
       {view === 'welcome' && <Welcome onStart={() => setView('requirements')} onSignIn={() => setView('login')} />}
       {view === 'requirements' && <Requirements onAccept={start} onBack={() => setView('welcome')} />}
-      {view === 'login' && <DriverLogin onDone={() => setView('home')} onBack={() => setView('welcome')} />}
+      {view === 'login' && <DriverLogin onDone={() => { session.clear(); setView('home'); }} onBack={() => setView('welcome')} />}
       {view === 'home' && <DriverHome onLogout={() => { driverAuth.clear(); setView('welcome'); }} />}
       {view === 'wizard' && ref && (
         <Wizard appId={ref.id} token={ref.token} initialDraft={draft}
           onSubmitted={(app) => { setSubmitted({ reference: app.reference }); setView('pending'); }}
           onExit={reset} />
       )}
-      {view === 'pending' && submitted && <Pending app={submitted} onReset={reset} />}
+      {view === 'pending' && submitted && <Pending app={submitted} onReset={reset} onSignIn={() => setView('login')} />}
     </I18nCtx.Provider>
   );
 }
