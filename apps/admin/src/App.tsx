@@ -142,7 +142,9 @@ function RateCards({ role }: { role?: string }) {
   const load = () => api.rateCards().then(setRows).catch(() => setRows([]));
   useEffect(() => { load(); }, []);
 
-  const blank = () => ({ name: '', active: true, isDefault: false, validFrom: '', validTo: '', minPackages: 0, fixedRate: 0, ratePerPackage: 0, ratePerKg: 0, ratePerKm: 0, avgWeightKg: 0, avgDistanceKm: 0 });
+  const blank = () => ({ name: '', currency: 'BBD', active: true, isDefault: false, validFrom: '', validTo: '', minPackages: 0, fixedRate: 0, ratePerPackage: 0, ratePerKg: 0, ratePerKm: 0, avgWeightKg: 0, avgDistanceKm: 0 });
+  const cur = (c: any) => c?.currency || 'BBD';
+  const money = (n: number, c: any) => `${cur(c)} ${n}`;
   const startNew = () => setEditing(blank());
   const startEdit = (c: any) => setEditing({ ...c, validFrom: c.validFrom || '', validTo: c.validTo || '' });
   const setF = (k: string, v: any) => setEditing((e: any) => ({ ...e, [k]: v }));
@@ -197,15 +199,15 @@ function RateCards({ role }: { role?: string }) {
                 </span>}
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8, fontSize: 12.5, color: 'var(--ink-600)' }}>
-                <span>{t('Fija', 'Fixed')} ${c.fixedRate}/{t('día', 'day')} ({t('mín', 'min')} {c.minPackages}, {t('si no', 'else')} ${c.fixedRate / 2})</span>
-                <span>· ${c.ratePerPackage}/{t('paq', 'pkg')}</span>
-                <span>· ${c.ratePerKg}/kg</span>
-                <span>· ${c.ratePerKm}/km</span>
+                <span>{t('Fija', 'Fixed')} {money(c.fixedRate, c)}/{t('día', 'day')} ({t('mín', 'min')} {c.minPackages}, {t('si no', 'else')} {money(c.fixedRate / 2, c)})</span>
+                <span>· {money(c.ratePerPackage, c)}/{t('paq', 'pkg')}</span>
+                <span>· {money(c.ratePerKg, c)}/kg</span>
+                <span>· {money(c.ratePerKm, c)}/km</span>
                 <span className="mono" style={{ color: 'var(--ink-400)' }}>· ~{c.avgWeightKg}kg/{t('paq', 'pkg')}, {c.avgDistanceKm}km</span>
               </div>
               <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 9, fontSize: 12.5 }}>
-                {t('Estimado', 'Estimate')} @ {sample} {t('paq', 'pkgs')}: <b>${e.total}</b>
-                <span className="mono" style={{ color: 'var(--ink-500)' }}> = ${e.fixed} {e.met ? t('(fija)', '(full)') : t('(media)', '(half)')} + ${Math.round(e.pkg * 100) / 100} + ${Math.round(e.wt * 100) / 100} + ${Math.round(e.km * 100) / 100}</span>
+                {t('Estimado', 'Estimate')} @ {sample} {t('paq', 'pkgs')}: <b>{money(e.total, c)}</b>
+                <span className="mono" style={{ color: 'var(--ink-500)' }}> = {money(e.fixed, c)} {e.met ? t('(fija)', '(full)') : t('(media)', '(half)')} + {money(Math.round(e.pkg * 100) / 100, c)} + {money(Math.round(e.wt * 100) / 100, c)} + {money(Math.round(e.km * 100) / 100, c)}</span>
               </div>
             </div>
           );
@@ -215,9 +217,15 @@ function RateCards({ role }: { role?: string }) {
       {editing && (
         <div className="card" style={{ width: 340, maxWidth: '100%', flexShrink: 0, padding: 18, position: 'sticky', top: 0 }}>
           <div className="eyebrow" style={{ marginBottom: 10 }}>{editing.id ? t('Editar tarifa', 'Edit rate card') : t('Nueva tarifa', 'New rate card')}</div>
-          <label className="field-label">{t('Nombre', 'Name')}</label>
-          <input className="input" value={editing.name} onChange={(e) => setF('name', e.target.value)} style={{ marginBottom: 10 }} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+            <div><label className="field-label">{t('Nombre', 'Name')}</label><input className="input" value={editing.name} onChange={(e) => setF('name', e.target.value)} /></div>
+            <div><label className="field-label">{t('Moneda', 'Currency')}</label>
+              <select className="input mono" value={editing.currency || 'BBD'} onChange={(e) => setF('currency', e.target.value)}>
+                {['BBD', 'USD', 'XCD', 'TTD', 'JMD', 'EUR', 'GBP'].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
             <div><label className="field-label">{t('Válida desde', 'Valid from')}</label><input className="input mono" type="date" value={editing.validFrom} onChange={(e) => setF('validFrom', e.target.value)} /></div>
             <div><label className="field-label">{t('Válida hasta', 'Valid to')}</label><input className="input mono" type="date" value={editing.validTo} onChange={(e) => setF('validTo', e.target.value)} /></div>
           </div>

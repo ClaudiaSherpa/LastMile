@@ -13,6 +13,7 @@ export interface PayEstimate {
   packages: number;
   weightKg: number;
   distanceKm: number;
+  currency: string;
   rateCard: { id: string; name: string };
 }
 
@@ -33,7 +34,11 @@ export class RateCardService {
 
   async create(input: Partial<RateCard>) {
     if (input.isDefault) await this.cards.update({ isDefault: true }, { isDefault: false });
-    return this.cards.save(this.cards.create({ name: input.name?.trim() || 'Rate card', ...this.clean(input) }));
+    return this.cards.save(this.cards.create({
+      name: input.name?.trim() || 'Rate card',
+      currency: (input.currency || 'BBD').trim().toUpperCase().slice(0, 6),
+      ...this.clean(input),
+    }));
   }
 
   async update(id: string, input: Partial<RateCard>) {
@@ -42,6 +47,7 @@ export class RateCardService {
     if (input.isDefault) await this.cards.update({ isDefault: true }, { isDefault: false });
     Object.assign(c, this.clean(input));
     if (input.name != null) c.name = input.name.trim();
+    if (input.currency != null) c.currency = input.currency.trim().toUpperCase().slice(0, 6) || 'BBD';
     return this.cards.save(c);
   }
 
@@ -95,6 +101,7 @@ export class RateCardService {
       total: round(fixed + perPackage + perWeight + perKm),
       fixed, perPackage, perWeight, perKm,
       metMinimum, packages, weightKg, distanceKm,
+      currency: card.currency || 'BBD',
       rateCard: { id: card.id, name: card.name },
     };
   }

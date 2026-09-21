@@ -968,9 +968,9 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
             <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '3px 0 8px' }}>{t('Recoge en', 'Pick up at')} {o.hub}</div>
             {o.estimate && (
               <div style={{ background: 'var(--brand-tint)', color: 'var(--brand-ink)', borderRadius: 9, padding: '8px 10px', fontSize: 12.5, marginBottom: 10 }}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{t('Pago estimado', 'Estimated pay')}: ${o.estimate.total}</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{t('Pago estimado', 'Estimated pay')}: {o.estimate.currency || 'BBD'} {o.estimate.total}</div>
                 <div className="mono" style={{ fontSize: 10.5, opacity: 0.85, marginTop: 2 }}>
-                  ${o.estimate.fixed} {o.estimate.metMinimum ? t('fija', 'fixed') : t('media', 'half')} · ${o.estimate.perPackage} {t('paq', 'pkg')} · ${o.estimate.perWeight} kg · ${o.estimate.perKm} km
+                  {o.estimate.currency || 'BBD'} {o.estimate.fixed} {o.estimate.metMinimum ? t('fija', 'fixed') : t('media', 'half')} · {o.estimate.perPackage} {t('paq', 'pkg')} · {o.estimate.perWeight} kg · {o.estimate.perKm} km
                 </div>
               </div>
             )}

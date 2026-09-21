@@ -68,11 +68,11 @@ export class DeliveryPlanService {
   }
 
   /** WhatsApp a driver that a tender is available, with a link to open the app. */
-  private notifyOffer(phone: string | undefined, parish: string, packages: number, hub: string, date?: string, preassigned = false, estTotal?: number | null) {
+  private notifyOffer(phone: string | undefined, parish: string, packages: number, hub: string, date?: string, preassigned = false, estimate?: { total: number; currency: string } | null) {
     if (!phone) return;
     const when = date ? ` (${date})` : '';
     const link = env.api.publicBaseUrl;
-    const est = estTotal != null ? ` Est. pay $${estTotal}.` : '';
+    const est = estimate ? ` Est. pay ${estimate.currency} ${estimate.total}.` : '';
     const text = preassigned
       ? `PasarEx: You've been pre-assigned ${packages} packages for ${this.prettyParish(parish)}${when}, pickup at ${hub}.${est} Open the app: ${link}`
       : `PasarEx: New delivery offer${when} — ${packages} packages for ${this.prettyParish(parish)}, pickup at ${hub}.${est} Open the app to accept: ${link}`;
@@ -243,7 +243,7 @@ export class DeliveryPlanService {
         );
         accepted += cap;
         this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true, estimate: est });
-        this.notifyOffer(c?.phone, line.parish, cap, plan.hubName, plan.operationalDate, true, est?.total);
+        this.notifyOffer(c?.phone, line.parish, cap, plan.hubName, plan.operationalDate, true, est);
       }
 
       // 2) tender the remainder to eligible (non-preassigned) drivers
@@ -258,7 +258,7 @@ export class DeliveryPlanService {
             this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, estimate: est, status: PlanTenderStatus.OFFERED }),
           );
           this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, estimate: est });
-          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, false, est?.total);
+          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, false, est);
         }
         // no one can cover the remainder -> the line is unfeasible
         line.status = eligible.length ? PlanLineStatus.BROADCASTING : PlanLineStatus.UNFEASIBLE;
@@ -320,7 +320,7 @@ export class DeliveryPlanService {
         line.acceptedPackages += cap;
         seen.add(drvId);
         this.realtime.emitDriver(drvId, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, preassigned: true, autoAccepted: true, estimate: est });
-        this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, true, est?.total);
+        this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, true, est);
       }
 
       // offer the remainder to newly-eligible (non-pre-assigned, not-yet-tendered) drivers
@@ -333,7 +333,7 @@ export class DeliveryPlanService {
           const est = this.payEstimate(cards, c.rateCardId, cap, estDate);
           await this.tenders.save(this.tenders.create({ line, driver: { id: c.id } as DriverProfile, packages: cap, preassigned: false, estimate: est, status: PlanTenderStatus.OFFERED }));
           this.realtime.emitDriver(c.id, 'plan.tender', { lineId: line.id, parish: line.parish, packages: cap, hub: plan.hubName, estimate: est });
-          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, false, est?.total);
+          this.notifyOffer(c.phone, line.parish, cap, plan.hubName, plan.operationalDate, false, est);
           newOffers++; hasOpenOffers = true;
         }
       }

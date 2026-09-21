@@ -13,6 +13,10 @@ export class RateCard {
   @Column()
   name: string;
 
+  // ISO-ish currency code shown with all monetary values (e.g. BBD, USD)
+  @Column({ default: 'BBD' })
+  currency: string;
+
   @Column({ default: true })
   active: boolean;
 
