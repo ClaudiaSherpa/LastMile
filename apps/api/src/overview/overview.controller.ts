@@ -1,6 +1,7 @@
 import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
+import { ApplicationStatus } from '@sherpa/shared';
 import { DriverGroupService } from '../messaging/driver-group.service';
 import { DeliveryStatus, Role } from '@sherpa/shared';
 import { Roles } from '../auth/decorators';
@@ -40,7 +41,8 @@ export class OverviewController {
   async overview() {
     const [drivers, applications, freights, docTypes, areas, stages] = await Promise.all([
       this.drivers.count(),
-      this.applications.count(),
+      // "in queue" = applications awaiting review (matches the approvals queue), not rejected/approved/draft
+      this.applications.count({ where: { status: In([ApplicationStatus.IN_REVIEW, ApplicationStatus.RETURNED]) } }),
       this.freights.count(),
       this.docTypes.count(),
       this.areas.count(),
