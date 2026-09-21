@@ -31,8 +31,8 @@ const statusBadge: Record<string, string> = {
 // ── login ───────────────────────────────────────────────────────
 function Login({ onDone }: { onDone: () => void }) {
   const { t } = useI18n();
-  const [email, setEmail] = useState('dispatch@pasarex.com');
-  const [password, setPassword] = useState('pasarex123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -67,9 +67,6 @@ function Login({ onDone }: { onDone: () => void }) {
         <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
           {busy ? '…' : t('Ingresar', 'Sign in')}
         </button>
-        <p style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 14, textAlign: 'center' }}>
-          admin · dispatch · security @pasarex.com / pasarex123
-        </p>
       </form>
     </div>
   );
