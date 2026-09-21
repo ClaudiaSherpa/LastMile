@@ -1684,6 +1684,32 @@ function RoadsLayer() {
   );
 }
 
+// Parish boundaries overlay (from "Parishes.kmz"), same projection as the roads.
+function ParishesLayer() {
+  const [data, setData] = useState<{ parishes: any[]; vb: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    import('./assets/barbados-parishes')
+      .then((m) => { if (live) setData({ parishes: m.PARISHES, vb: m.PARISHES_VIEWBOX }); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  if (!data) return null;
+  return (
+    <>
+      <svg viewBox={`0 0 ${data.vb} ${data.vb}`} preserveAspectRatio="none"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden>
+        {data.parishes.map((p) => (
+          <path key={p.name} d={p.d} fill="var(--brand, #16a34a)" fillOpacity={0.07} stroke="var(--brand-ink, #0b6b3a)" strokeWidth={1.2} vectorEffect="non-scaling-stroke" strokeOpacity={0.65} />
+        ))}
+      </svg>
+      {data.parishes.map((p) => (
+        <div key={`t-${p.name}`} style={{ position: 'absolute', left: `${(p.cx / data.vb) * 100}%`, top: `${(p.cy / data.vb) * 100}%`, transform: 'translate(-50%,-50%)', pointerEvents: 'none', fontSize: 10, fontWeight: 700, color: 'var(--ink-700)', textShadow: '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff', whiteSpace: 'nowrap' }}>{p.name}</div>
+      ))}
+    </>
+  );
+}
+
 // The day's plan for the live map, broken down PER PLAN: each plan shows its
 // parish lines and the drivers on each, with per-plan packages and status.
 const prettyParish = (slug: string) => (slug || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -1775,6 +1801,7 @@ function LiveMap({ role }: { role?: string }) {
   const { t } = useI18n();
   const [drivers, setDrivers] = useState<Record<string, any>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [layers, setLayers] = useState<{ roads: boolean; parishes: boolean }>({ roads: true, parishes: false });
   const { connected } = useRoom('ops');
 
   useEffect(() => {
@@ -1804,7 +1831,18 @@ function LiveMap({ role }: { role?: string }) {
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div className="card" style={{ position: 'relative', width: 'min(100%, 460px)', aspectRatio: MAP_ASPECT, overflow: 'hidden', background: 'var(--surface-2, #eef3f5)' }}>
-          <RoadsLayer />
+          {layers.roads && <RoadsLayer />}
+          {layers.parishes && <ParishesLayer />}
+          {/* layer control */}
+          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, background: 'var(--surface)', borderRadius: 9, boxShadow: 'var(--shadow)', padding: '7px 10px', display: 'grid', gap: 4 }}>
+            <div className="eyebrow" style={{ fontSize: 9.5 }}>{t('Capas', 'Layers')}</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={layers.roads} onChange={(e) => setLayers((l) => ({ ...l, roads: e.target.checked }))} /> {t('Carreteras', 'Roads')}
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={layers.parishes} onChange={(e) => setLayers((l) => ({ ...l, parishes: e.target.checked }))} /> {t('Parroquias', 'Parishes')}
+            </label>
+          </div>
           {list.map((d: any) => {
             const { x, y } = toXY(d.lng, d.lat);
             const on = selected === d.id;
