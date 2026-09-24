@@ -46,6 +46,15 @@ export class RateCard {
   @Column({ type: 'double precision', default: 0 })
   ratePerKm: number;
 
+  // low-volume rule: below this many packages, pay a flat rate per package
+  // (no day rate / kg / km) to avoid an expensive day-rate on tiny routes.
+  // 0 disables the rule.
+  @Column({ type: 'int', default: 0 })
+  lowVolumeThreshold: number;
+
+  @Column({ type: 'double precision', default: 0 })
+  lowVolumeRatePerPackage: number;
+
   // estimate assumptions (admin-only)
   @Column({ type: 'double precision', default: 0 })
   avgWeightKg: number; // average weight per package

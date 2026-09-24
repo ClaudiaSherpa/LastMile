@@ -10,6 +10,7 @@ export interface PayEstimate {
   perWeight: number;
   perKm: number;
   metMinimum: boolean;
+  lowVolume: boolean;
   packages: number;
   weightKg: number;
   distanceKm: number;
@@ -61,7 +62,7 @@ export class RateCardService {
   // whitelist of numeric/flag fields to copy
   private clean(input: Partial<RateCard>): Partial<RateCard> {
     const out: any = {};
-    for (const k of ['active', 'isDefault', 'validFrom', 'validTo', 'minPackages', 'fixedRate', 'ratePerPackage', 'ratePerKg', 'ratePerKm', 'avgWeightKg', 'avgDistanceKm'] as const) {
+    for (const k of ['active', 'isDefault', 'validFrom', 'validTo', 'minPackages', 'fixedRate', 'ratePerPackage', 'ratePerKg', 'ratePerKm', 'avgWeightKg', 'avgDistanceKm', 'lowVolumeThreshold', 'lowVolumeRatePerPackage'] as const) {
       if (input[k] !== undefined) out[k] = input[k];
     }
     return out;
@@ -90,19 +91,25 @@ export class RateCardService {
   estimate(card: RateCard | null, packages: number): PayEstimate | null {
     if (!card) return null;
     const round = (n: number) => Math.round(n * 100) / 100;
-    const metMinimum = packages >= (card.minPackages || 0);
-    const fixed = round(metMinimum ? card.fixedRate : card.fixedRate / 2);
-    const perPackage = round(packages * card.ratePerPackage);
     const weightKg = round(packages * card.avgWeightKg);
-    const perWeight = round(weightKg * card.ratePerKg);
     const distanceKm = card.avgDistanceKm;
-    const perKm = round(distanceKm * card.ratePerKm);
-    return {
-      total: round(fixed + perPackage + perWeight + perKm),
-      fixed, perPackage, perWeight, perKm,
-      metMinimum, packages, weightKg, distanceKm,
+    const base = {
+      packages, weightKg, distanceKm,
       currency: card.currency || 'BBD',
       rateCard: { id: card.id, name: card.name },
     };
+
+    // low-volume routes: flat fixed rate per package (no day rate / kg / km)
+    if (card.lowVolumeThreshold > 0 && packages < card.lowVolumeThreshold) {
+      const perPackage = round(packages * card.lowVolumeRatePerPackage);
+      return { ...base, total: perPackage, fixed: 0, perPackage, perWeight: 0, perKm: 0, metMinimum: false, lowVolume: true };
+    }
+
+    const metMinimum = packages >= (card.minPackages || 0);
+    const fixed = round(metMinimum ? card.fixedRate : card.fixedRate / 2);
+    const perPackage = round(packages * card.ratePerPackage);
+    const perWeight = round(weightKg * card.ratePerKg);
+    const perKm = round(distanceKm * card.ratePerKm);
+    return { ...base, total: round(fixed + perPackage + perWeight + perKm), fixed, perPackage, perWeight, perKm, metMinimum, lowVolume: false };
   }
 }
