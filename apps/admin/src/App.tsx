@@ -401,29 +401,39 @@ function Messages() {
   const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
   const [mode, setMode] = useState<'direct' | 'broadcast'>('broadcast');
-  const [to, setTo] = useState('');
   const [text, setText] = useState('');
   const [target, setTarget] = useState('all'); // 'all' | groupId
   const [groups, setGroups] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [picked, setPicked] = useState<any[]>([]); // {kind:'driver'|'group'|'number', id?, name, value?, count?}
+  const [manual, setManual] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const { connected } = useRoom('ops');
 
   const loadGroups = useCallback(() => { api.driverGroups().then(setGroups).catch(() => {}); }, []);
-  useEffect(() => { api.whatsappMessages().then(setRows).catch(() => {}); loadGroups(); }, [loadGroups]);
+  useEffect(() => { api.whatsappMessages().then(setRows).catch(() => {}); loadGroups(); api.drivers().then(setDrivers).catch(() => {}); }, [loadGroups]);
+
+  const addPick = (p: any) => setPicked((cur) => (cur.some((x) => x.kind === p.kind && (x.id === p.id) && (x.value === p.value)) ? cur : [...cur, p]));
+  const removePick = (i: number) => setPicked((cur) => cur.filter((_, idx) => idx !== i));
   useEvent('whatsapp.message', useCallback((m: any) => {
     setRows((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
   }, []));
 
   const send = async () => {
-    if (!to.trim() || !text.trim()) return;
+    if (!picked.length || !text.trim()) return;
+    const body = {
+      text: text.trim(),
+      driverIds: picked.filter((p) => p.kind === 'driver').map((p) => p.id),
+      groupIds: picked.filter((p) => p.kind === 'group').map((p) => p.id),
+      numbers: picked.filter((p) => p.kind === 'number').map((p) => p.value),
+    };
     setBusy(true); setNote('');
     try {
-      const m = await api.whatsappSend(to.trim(), text.trim());
-      setRows((prev) => (prev.some((x) => x.id === m.id) ? prev : [m, ...prev]));
-      setText('');
-      if (m.status === 'skipped') setNote(t('Sin EVOLUTION_API_KEY — el mensaje se registró pero no se envió.', 'No EVOLUTION_API_KEY — message logged but not sent.'));
-      else if (m.status === 'failed') setNote(t('Falló el envío — revisa la configuración de Evolution.', 'Send failed — check the Evolution configuration.'));
+      const r = await api.sendMessage(body);
+      setText(''); setPicked([]);
+      setNote(t(`Enviado: ${r.sent} ok, ${r.skipped} omitidos, ${r.failed} fallidos (de ${r.total}).`, `Sent: ${r.sent} ok, ${r.skipped} skipped, ${r.failed} failed (of ${r.total}).`));
+      api.whatsappMessages().then(setRows).catch(() => {});
     } catch (e: any) { setNote(e.message); }
     finally { setBusy(false); }
   };
@@ -456,12 +466,36 @@ function Messages() {
           {tabBtn('direct', t('Directo', 'Direct'))}
         </div>
         {mode === 'direct' ? (<>
-          <label className="field-label">{t('Número', 'Number')}</label>
-          <input className="input mono" value={to} onChange={(e) => setTo(e.target.value)} placeholder="+1 246 555 0100" style={{ marginBottom: 10 }} />
+          <label className="field-label">{t('Agregar conductor', 'Add driver')}</label>
+          <select className="input" value="" onChange={(e) => { const d = drivers.find((x) => x.id === e.target.value); if (d) addPick({ kind: 'driver', id: d.id, name: d.name }); }} style={{ marginBottom: 8 }}>
+            <option value="">{t('— elegir conductor —', '— choose driver —')}</option>
+            {drivers.filter((d) => d.phone).map((d) => <option key={d.id} value={d.id}>{d.name}{d.phone ? ` · ${d.phone}` : ''}</option>)}
+          </select>
+          <label className="field-label">{t('Agregar grupo', 'Add group')}</label>
+          <select className="input" value="" onChange={(e) => { const g = groups.find((x) => x.id === e.target.value); if (g) addPick({ kind: 'group', id: g.id, name: g.name, count: g.count }); }} style={{ marginBottom: 8 }}>
+            <option value="">{t('— elegir grupo —', '— choose group —')}</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
+          </select>
+          <label className="field-label">{t('Número manual', 'Manual number')}</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <input className="input mono" value={manual} onChange={(e) => setManual(e.target.value)} placeholder="+1 246 555 0100" style={{ flex: 1 }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && manual.trim()) { addPick({ kind: 'number', value: manual.trim(), name: manual.trim() }); setManual(''); } }} />
+            <button className="btn btn-ghost" style={{ padding: '0 12px' }} onClick={() => { if (manual.trim()) { addPick({ kind: 'number', value: manual.trim(), name: manual.trim() }); setManual(''); } }}>+</button>
+          </div>
+          {picked.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {picked.map((p, i) => (
+                <span key={i} className={`badge ${p.kind === 'group' ? 'badge-blue' : p.kind === 'number' ? 'badge-gray' : 'badge-brand'}`} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                  {p.kind === 'group' ? `👥 ${p.name} (${p.count})` : p.kind === 'number' ? `# ${p.name}` : p.name}
+                  <button onClick={() => removePick(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 11 }}>✕</button>
+                </span>
+              ))}
+            </div>
+          )}
           <label className="field-label">{t('Mensaje', 'Message')}</label>
           <textarea className="textarea" rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('Escribe un mensaje…', 'Type a message…')} style={{ marginBottom: 10 }} />
           {note && <div className="badge badge-amber" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
-          <button className="btn btn-primary btn-block" disabled={busy || !to.trim() || !text.trim()} onClick={send}>{busy ? '…' : t('Enviar', 'Send')}</button>
+          <button className="btn btn-primary btn-block" disabled={busy || !picked.length || !text.trim()} onClick={send}>{busy ? '…' : t('Enviar', 'Send')}</button>
         </>) : (<>
           <label className="field-label">{t('Destinatarios', 'Recipients')}</label>
           <select className="input" value={target} onChange={(e) => setTarget(e.target.value)} style={{ marginBottom: 10 }}>

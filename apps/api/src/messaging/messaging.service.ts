@@ -13,6 +13,42 @@ export class MessagingService {
     private groups: DriverGroupService,
   ) {}
 
+  /**
+   * Send to a mixed set of recipients — specific drivers, whole groups, and/or
+   * manually-typed numbers — deduped by phone number.
+   */
+  async sendMulti(input: { text: string; driverIds?: string[]; groupIds?: string[]; numbers?: string[] }) {
+    if (!input.text?.trim()) throw new BadRequestException('Message text required');
+    const norm = (p?: string) => (p ?? '').replace(/\D/g, '');
+    const targets = new Map<string, { phone: string; driverId?: string; name?: string }>();
+
+    // drivers (explicit + group members)
+    const ids = new Set(input.driverIds ?? []);
+    for (const gid of input.groupIds ?? []) (await this.groups.memberIds(gid)).forEach((id) => ids.add(id));
+    if (ids.size) {
+      const drivers = await this.drivers.find({ where: { id: In([...ids]) }, relations: { user: true } });
+      for (const d of drivers) {
+        const k = norm(d.user?.phone);
+        if (k && !targets.has(k)) targets.set(k, { phone: d.user!.phone!, driverId: d.id, name: d.user?.fullName });
+      }
+    }
+    // manual numbers
+    for (const n of input.numbers ?? []) {
+      const k = norm(n);
+      if (k && !targets.has(k)) targets.set(k, { phone: n.trim() });
+    }
+    if (!targets.size) throw new BadRequestException('No valid recipients');
+
+    let sent = 0, skipped = 0, failed = 0;
+    const recipients: any[] = [];
+    for (const t of targets.values()) {
+      const res = await this.whatsapp.send(t.phone, input.text.trim(), t.driverId);
+      if (res.status === 'sent') sent++; else if (res.status === 'failed') failed++; else skipped++;
+      recipients.push({ ...t, status: res.status });
+    }
+    return { total: targets.size, sent, skipped, failed, recipients };
+  }
+
   /** Send a WhatsApp message to a single driver by id. */
   async sendToDriver(driverId: string, text: string) {
     if (!text?.trim()) throw new BadRequestException('Message text required');

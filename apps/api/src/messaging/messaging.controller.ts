@@ -17,6 +17,12 @@ class BroadcastDto {
   @IsString() text: string;
   @IsOptional() @IsString() groupId?: string;
 }
+class SendMultiDto {
+  @IsString() text: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) driverIds?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) groupIds?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) numbers?: string[];
+}
 
 @Controller()
 export class MessagingController {
@@ -61,5 +67,11 @@ export class MessagingController {
   @Roles(Role.ADMIN, Role.DISPATCHER)
   broadcast(@Body() dto: BroadcastDto) {
     return this.messaging.broadcast(dto.text, dto.groupId);
+  }
+
+  @Post('messages/send')
+  @Roles(Role.ADMIN, Role.DISPATCHER)
+  sendMulti(@Body() dto: SendMultiDto) {
+    return this.messaging.sendMulti(dto);
   }
 }
