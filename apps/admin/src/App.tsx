@@ -1430,18 +1430,35 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
           </div>
         ))}
 
-      {dayStats?.recent?.some((r: any) => r.startMileagePhoto || r.endMileagePhoto) && (<>
-        <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Fotos del odómetro', 'Odometer photos')}</div>
-        <div style={{ display: 'grid', gap: 6 }}>
-          {dayStats.recent.filter((r: any) => r.startMileagePhoto || r.endMileagePhoto).map((r: any) => (
-            <div key={r.operationalDate} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-              <span className="mono" style={{ flex: 1, color: 'var(--ink-500)' }}>{r.operationalDate}</span>
-              {r.startMileagePhoto && <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => openOdo('start', r.operationalDate)}>📷 {t('Inicio', 'Start')} {r.startMileage ?? ''}</button>}
-              {r.endMileagePhoto && <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => openOdo('end', r.operationalDate)}>📷 {t('Fin', 'End')} {r.endMileage ?? ''}</button>}
-            </div>
-          ))}
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Viajes completados', 'Completed trips')}{dayStats?.tripsCount ? ` (${dayStats.tripsCount})` : ''}</div>
+      {!dayStats && <div style={{ color: 'var(--ink-500)', fontSize: 13 }}>…</div>}
+      {dayStats && !dayStats.trips?.length && <div style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>{t('Sin viajes completados', 'No completed trips')}</div>}
+      {dayStats?.trips?.length > 0 && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {dayStats.trips.map((tr: any) => {
+            const hm = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'America/Barbados', hour: '2-digit', minute: '2-digit', hour12: false }) : '—');
+            return (
+              <div key={tr.operationalDate} style={{ border: '1px solid var(--line)', borderRadius: 9, padding: '8px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{tr.operationalDate}</span>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{hm(tr.departedAt)} → {hm(tr.returnedAt)}</span>
+                  {tr.deliverySuccess != null && <span className="badge badge-brand" style={{ marginLeft: 'auto' }}>{tr.deliverySuccess}%</span>}
+                </div>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-600)', marginTop: 4 }}>
+                  {t('Recog', 'Picked')} {tr.packagesPicked ?? '—'} · {t('Entreg', 'Deliv')} {tr.successfulDeliveries ?? '—'} · {t('Devu', 'Ret')} {tr.packagesReturned ?? '—'}
+                  {tr.mileage != null ? ` · ${tr.mileage} km` : ''}
+                </div>
+                {(tr.startMileagePhoto || tr.endMileagePhoto) && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    {tr.startMileagePhoto && <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => openOdo('start', tr.operationalDate)}>📷 {t('Inicio', 'Start')} {tr.startMileage ?? ''}</button>}
+                    {tr.endMileagePhoto && <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => openOdo('end', tr.operationalDate)}>📷 {t('Fin', 'End')} {tr.endMileage ?? ''}</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      </>)}
+      )}
 
       <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Planes de entrega', 'Delivery plans')}</div>
       {!plans && <div style={{ color: 'var(--ink-500)', fontSize: 13 }}>…</div>}

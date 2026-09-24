@@ -167,13 +167,31 @@ export class OverviewController {
     const success = sum('successfulDeliveries');
     const returned = sum('packagesReturned');
     const mileage = rows.reduce((a, r) => a + (r.startMileage != null && r.endMileage != null ? r.endMileage - r.startMileage : 0), 0);
+    // completed trips = day-sheets where the driver returned to the depot
+    const completed = rows.filter((r) => r.depotReturnAt);
+    const trips = completed.map((r) => ({
+      operationalDate: r.operationalDate,
+      departedAt: r.depotDepartureAt ?? null,
+      returnedAt: r.depotReturnAt ?? null,
+      packagesPicked: r.packagesPicked ?? null,
+      successfulDeliveries: r.successfulDeliveries ?? null,
+      packagesReturned: r.packagesReturned ?? null,
+      startMileage: r.startMileage ?? null,
+      endMileage: r.endMileage ?? null,
+      startMileagePhoto: !!r.startMileagePhoto,
+      endMileagePhoto: !!r.endMileagePhoto,
+      mileage: r.startMileage != null && r.endMileage != null ? Math.round((r.endMileage - r.startMileage) * 10) / 10 : null,
+      deliverySuccess: r.packagesPicked ? Math.round(((r.successfulDeliveries ?? 0) / r.packagesPicked) * 100) : null,
+    }));
     return {
       days: rows.length,
+      tripsCount: completed.length,
       packagesPicked: picked,
       successfulDeliveries: success,
       packagesReturned: returned,
       successRate: picked ? Math.round((success / picked) * 100) : null,
       mileage: Math.round(mileage * 10) / 10,
+      trips,
       recent: rows.slice(0, 10).map((r) => ({
         operationalDate: r.operationalDate,
         packagesPicked: r.packagesPicked,
