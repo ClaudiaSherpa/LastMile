@@ -67,5 +67,7 @@ export const env = {
     apiKey: process.env.OPENROUTER_API_KEY ?? '',
     baseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
     model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash-lite',
+    // stronger vision model for odometer reading (falls back to the main model)
+    visionModel: process.env.OPENROUTER_OCR_MODEL ?? process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash',
   },
 };

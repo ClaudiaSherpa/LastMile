@@ -48,10 +48,15 @@ export class OcrService {
     if (!mimeType.startsWith('image/')) return { value: null, skipped: true, reason: 'unsupported_mime' };
     const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
     const prompt =
-      `You are reading a vehicle odometer from a dashboard photo. ` +
-      `Return ONLY a compact JSON object: {"odometer": <number>} where the value is the ` +
-      `total distance shown on the odometer as a plain number (ignore trip meters, units and decimals` +
-      ` unless the whole reading is decimal). If you cannot read it, return {"odometer": null}. No prose.`;
+      `Read the ODOMETER from this vehicle dashboard photo.\n` +
+      `The odometer is the vehicle's TOTAL distance travelled — the main, non-resettable counter, ` +
+      `usually 5 to 7 digits, often near a "km", "mi" or "ODO" label.\n` +
+      `Do NOT read the TRIP meter (TRIP / TRIP A / TRIP B / Odo Trip): that is a smaller, resettable ` +
+      `number, usually shorter and shown with a decimal point (e.g. 123.4). Also ignore speed, RPM, ` +
+      `fuel, temperature and clock.\n` +
+      `Read every digit carefully left to right. Give the whole-number total (drop any tenths).\n` +
+      `Return ONLY compact JSON: {"odometer": <integer>, "trip": <number or null>}. ` +
+      `Set "odometer" to null only if the main odometer is not legible. No prose, no markdown.`;
     try {
       const res = await fetch(`${env.ocr.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -62,18 +67,22 @@ export class OcrService {
           'X-Title': 'PasarEx LM Odometer OCR',
         },
         body: JSON.stringify({
-          model: env.ocr.model,
+          model: env.ocr.visionModel,
           temperature: 0,
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: dataUrl } }] }],
         }),
       });
-      if (!res.ok) return { value: null, skipped: false, reason: `http_${res.status}` };
+      if (!res.ok) { const b = await res.text().catch(() => ''); this.logger.warn(`odometer OCR ${res.status}: ${b.slice(0, 200)}`); return { value: null, skipped: false, reason: `http_${res.status}` }; }
       const json: any = await res.json();
       const text: string = json?.choices?.[0]?.message?.content ?? '';
       let value: number | null = null;
-      try { const parsed = JSON.parse(text); const n = Number(String(parsed?.odometer ?? '').replace(/[^\d.]/g, '')); value = Number.isFinite(n) && n > 0 ? n : null; } catch { value = null; }
-      this.logger.log(`odometer OCR → ${value}`);
+      try {
+        const parsed = JSON.parse(text);
+        const n = Math.round(Number(String(parsed?.odometer ?? '').replace(/[^\d.]/g, '')));
+        value = Number.isFinite(n) && n > 0 ? n : null;
+      } catch { value = null; }
+      this.logger.log(`odometer OCR (${env.ocr.visionModel}) → ${value} · raw=${text.slice(0, 80)}`);
       return { value, skipped: false, raw: text };
     } catch (e: any) {
       this.logger.error(`odometer OCR failed: ${e.message}`);
