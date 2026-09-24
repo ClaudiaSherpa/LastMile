@@ -1534,6 +1534,17 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
         <span className="badge badge-amber">{t('No registrados', 'Not recorded')}</span>
       )}
 
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Política de privacidad', 'Privacy policy')}</div>
+      {docs?.privacy?.acceptedAt ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+          <span className="badge badge-brand">{t('Aceptada', 'Accepted')}</span>
+          {docs.privacy.version && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>v{docs.privacy.version}</span>}
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{new Date(docs.privacy.acceptedAt).toLocaleString()}</span>
+        </div>
+      ) : (
+        <span className="badge badge-amber">{t('No registrada', 'Not recorded')}</span>
+      )}
+
       {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
       {editOpen && (
         <DriverEditModal driverId={driverId} onClose={() => setEditOpen(false)}

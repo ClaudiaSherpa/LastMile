@@ -145,6 +145,7 @@ export class OverviewController {
       driverId: id,
       driver: { name: driver.user?.fullName, phone: driver.user?.phone, email: driver.user?.email, address: driver.address },
       terms: { acceptedAt: draft.termsAcceptedAt ?? null, version: draft.termsVersion ?? null },
+      privacy: { acceptedAt: draft.privacyAcceptedAt ?? null, version: draft.privacyVersion ?? null },
       documents: docs.map((d) => ({
         id: d.id,
         key: d.documentType.key,

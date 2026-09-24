@@ -85,6 +85,7 @@ export const api = {
       driverId: string;
       driver: { name?: string; phone?: string; email?: string; address?: string };
       terms: { acceptedAt: string | null; version: string | null };
+      privacy?: { acceptedAt: string | null; version: string | null };
       documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
     }>(`/drivers/${id}/documents`),
   driverDayStats: (id: string) => request<any>(`/drivers/${id}/day-stats`),

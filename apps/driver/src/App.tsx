@@ -213,14 +213,17 @@ function Privacy({ onBack }: { onBack: () => void }) {
 function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | void; onBack: () => void }) {
   const { t, lang } = useI18n();
   const [accepted, setAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const apply = async () => {
-    if (!accepted || busy) return;
+    if (!accepted || !privacyAccepted || busy) return;
     setBusy(true);
     try { await onAccept(); } finally { setBusy(false); }
   };
 
+  if (showPrivacy) return <Privacy onBack={() => setShowPrivacy(false)} />;
   return (
     <Phone>
       <div style={{ paddingTop: 54 }}>
@@ -276,7 +279,17 @@ function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | vo
                'I have read and accept the Terms of Service and confirm I meet all the requirements.')}
           </span>
         </label>
-        <button className="btn btn-primary btn-lg btn-block" disabled={!accepted || busy} onClick={apply}>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', marginBottom: 12 }}>
+          <input type="checkbox" checked={privacyAccepted} onChange={(e) => setPrivacyAccepted(e.target.checked)}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: 'var(--brand)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, color: 'var(--ink-700)', lineHeight: 1.45 }}>
+            {t('He leído y acepto la ', 'I have read and accept the ')}
+            <button type="button" onClick={(e) => { e.preventDefault(); setShowPrivacy(true); }} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--brand-ink)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>
+              {t('Política de privacidad', 'Privacy Policy')}
+            </button>.
+          </span>
+        </label>
+        <button className="btn btn-primary btn-lg btn-block" disabled={!accepted || !privacyAccepted || busy} onClick={apply}>
           {busy ? '…' : t('Aceptar y postularme', 'Accept & apply')}
         </button>
       </div>
@@ -1190,7 +1203,8 @@ export function App() {
     session.set(s);
     setRef(s);
     // record the acceptance on the application (auditable, retained on submit)
-    const acceptance = { termsAcceptedAt: new Date().toISOString(), termsVersion: TERMS_VERSION };
+    const now = new Date().toISOString();
+    const acceptance = { termsAcceptedAt: now, termsVersion: TERMS_VERSION, privacyAcceptedAt: now, privacyVersion: PRIVACY_VERSION };
     setDraft(acceptance);
     try { await api.patch(r.id, r.resumeToken, acceptance); } catch { /* offline tolerated */ }
     setView('wizard');
