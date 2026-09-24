@@ -3,6 +3,7 @@ import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validato
 import { Role } from '@sherpa/shared';
 import { Public, Roles } from '../auth/decorators';
 import { UsersService } from './users.service';
+import { AuthService } from '../auth/auth.service';
 
 class InviteDto {
   @IsString() phone: string;
@@ -17,7 +18,13 @@ class AcceptDto {
 
 @Controller()
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(private readonly users: UsersService, private readonly auth: AuthService) {}
+
+  @Post('users/:id/reset-password')
+  @Roles(Role.ADMIN)
+  resetPassword(@Param('id') id: string) {
+    return this.auth.requestResetForUser(id);
+  }
 
   @Post('users/invite')
   @Roles(Role.ADMIN)

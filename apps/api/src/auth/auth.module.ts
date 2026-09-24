@@ -6,6 +6,7 @@ import { User } from '../database/entities';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { env } from '../config/env';
 
 @Global()
@@ -14,6 +15,7 @@ import { env } from '../config/env';
     PassportModule,
     JwtModule.register({ secret: env.jwt.accessSecret }),
     TypeOrmModule.forFeature([User]),
+    WhatsAppModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

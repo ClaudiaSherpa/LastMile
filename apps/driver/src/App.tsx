@@ -546,10 +546,17 @@ function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => voi
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr('');
     try { await api.login(phone.trim(), password); onDone(); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const forgot = async () => {
+    if (!phone.trim()) { setErr(t('Ingresa tu celular primero.', 'Enter your mobile first.')); return; }
+    setErr(''); setNote('');
+    try { await api.forgotPassword(phone.trim()); setNote(t('Te enviamos un enlace por WhatsApp para restablecer tu contraseña.', 'We sent you a WhatsApp link to reset your password.')); }
+    catch (e: any) { setErr(e.message); }
   };
   return (
     <Phone>
@@ -566,8 +573,51 @@ function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         <Field label={t('Celular', 'Mobile')}><input className="input mono" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 246 XXX XXXX" /></Field>
         <Field label={t('Contraseña', 'Password')}><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
         {err && <div className="badge badge-red" style={{ marginBottom: 12 }}>{err}</div>}
+        {note && <div className="badge badge-brand" style={{ marginBottom: 12, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
         <button className="btn btn-primary btn-lg btn-block" style={{ marginTop: 'auto' }} disabled={busy || !phone || !password}>{busy ? '…' : t('Ingresar', 'Sign in')}</button>
+        <button type="button" onClick={forgot} style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', color: 'var(--ink-500)', fontSize: 13, cursor: 'pointer' }}>{t('¿Olvidaste tu contraseña?', 'Forgot your password?')}</button>
       </form>
+    </Phone>
+  );
+}
+
+// Public password-reset page for the driver app (WhatsApp link: /?reset=<token>).
+function DriverReset({ token }: { token: string }) {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  useEffect(() => { api.getReset(token).then(setInfo).catch((e) => setErr(e.message)); }, [token]);
+  const submit = async () => {
+    if (password.length < 6) { setErr(t('La contraseña debe tener 6+ caracteres.', 'Password must be 6+ characters.')); return; }
+    setBusy(true); setErr(null);
+    try { await api.resetPassword(token, password); setDone(true); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 20px 12px' }}>
+          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand-600)' }}>LM</span></span>
+          <LangToggle />
+        </div>
+      </div>
+      <div style={{ padding: '8px 22px 22px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {done ? (<>
+          <h1 className="display" style={{ fontSize: 24, margin: '8px 0 6px' }}>{t('Contraseña actualizada', 'Password updated')}</h1>
+          <p style={{ color: 'var(--ink-600)', fontSize: 14 }}>{t('Ya puedes iniciar sesión con tu nueva contraseña.', 'You can now sign in with your new password.')}</p>
+          <a className="btn btn-primary btn-lg btn-block" style={{ marginTop: 'auto', textDecoration: 'none' }} href="/">{t('Ir a iniciar sesión', 'Go to sign in')}</a>
+        </>) : err && !info ? (
+          <div className="badge badge-red" style={{ whiteSpace: 'normal', height: 'auto', padding: 10 }}>{err}</div>
+        ) : !info ? <div style={{ color: 'var(--ink-500)' }}>…</div> : (<>
+          <h1 className="display" style={{ fontSize: 24, margin: '8px 0 4px' }}>{t('Nueva contraseña', 'New password')}</h1>
+          <p style={{ color: 'var(--ink-500)', fontSize: 13.5, margin: '0 0 16px' }}>{info.name}</p>
+          <Field label={t('Contraseña', 'Password')}><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          {err && <div className="badge badge-red" style={{ marginBottom: 12 }}>{err}</div>}
+          <button className="btn btn-primary btn-lg btn-block" style={{ marginTop: 'auto' }} disabled={busy} onClick={submit}>{busy ? '…' : t('Actualizar contraseña', 'Update password')}</button>
+        </>)}
+      </div>
     </Phone>
   );
 }
@@ -1047,10 +1097,11 @@ export function App() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const trackToken = params.get('track');
   const rateToken = params.get('rate');
+  const resetToken = params.get('reset');
 
   // resume an in-flight application on load
   useEffect(() => {
-    if (trackToken || rateToken) return;
+    if (trackToken || rateToken || resetToken) return;
     if (driverAuth.get()) { setView('home'); return; } // signed-in driver
     const s = session.get();
     if (!s) { setView('welcome'); return; }
@@ -1081,10 +1132,10 @@ export function App() {
 
   const reset = () => { session.clear(); setRef(null); setSubmitted(null); setView('welcome'); };
 
-  if (trackToken || rateToken) {
+  if (trackToken || rateToken || resetToken) {
     return (
       <I18nCtx.Provider value={i18n}>
-        {trackToken ? <Tracking token={trackToken} /> : <Rate token={rateToken!} />}
+        {trackToken ? <Tracking token={trackToken} /> : rateToken ? <Rate token={rateToken} /> : <DriverReset token={resetToken!} />}
       </I18nCtx.Provider>
     );
   }

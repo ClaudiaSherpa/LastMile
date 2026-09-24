@@ -61,6 +61,10 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   me: () => request<{ sub: string; role: string; email?: string }>('/auth/me'),
+  forgotPassword: (username: string) => request<any>('/auth/forgot', { method: 'POST', body: JSON.stringify({ username }) }),
+  getReset: (token: string) => request<{ ok: boolean; name: string }>(`/auth/reset/${token}`),
+  resetPassword: (token: string, password: string) => request<any>(`/auth/reset/${token}`, { method: 'POST', body: JSON.stringify({ password }) }),
+  resetUserPassword: (id: string) => request<any>(`/users/${id}/reset-password`, { method: 'POST' }),
   // staff users + invites (admin)
   listUsers: () => request<any[]>('/users'),
   inviteUser: (phone: string, role: string) => request<any>('/users/invite', { method: 'POST', body: JSON.stringify({ phone, role }) }),

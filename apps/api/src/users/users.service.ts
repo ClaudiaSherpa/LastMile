@@ -53,7 +53,7 @@ export class UsersService {
     if (input.email) user.email = input.email.trim();
     user.passwordHash = await argon2.hash(input.password);
     user.active = true;
-    user.inviteToken = undefined;
+    user.inviteToken = null as any; // null (not undefined) so TypeORM clears the column
     try {
       await this.users.save(user);
     } catch (e: any) {

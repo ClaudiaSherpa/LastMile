@@ -41,6 +41,14 @@ export class User {
   @Column({ nullable: true })
   inviteToken?: string;
 
+  // one-time password-reset token (sent to the user over WhatsApp)
+  @Index({ unique: true })
+  @Column({ nullable: true })
+  resetToken?: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  resetTokenExpiresAt?: Date;
+
   @Column({ default: true })
   active: boolean;
 

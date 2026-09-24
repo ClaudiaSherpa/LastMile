@@ -35,6 +35,15 @@ function Login({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  const forgot = async () => {
+    const id = email.trim() || window.prompt(t('Ingresa tu número o correo:', 'Enter your number or email:')) || '';
+    if (!id.trim()) return;
+    setNote(''); setErr('');
+    try { await api.forgotPassword(id.trim()); setNote(t('Si la cuenta existe, enviamos un enlace de restablecimiento por WhatsApp.', 'If the account exists, we sent a reset link via WhatsApp.')); }
+    catch (e: any) { setErr(e.message); }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,8 +73,12 @@ function Login({ onDone }: { onDone: () => void }) {
         <label className="field-label">{t('Contraseña', 'Password')}</label>
         <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ marginBottom: 16 }} />
         {err && <div className="badge badge-red" style={{ marginBottom: 12 }}>{err}</div>}
+        {note && <div className="badge badge-brand" style={{ marginBottom: 12, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
         <button className="btn btn-primary btn-block btn-lg" disabled={busy}>
           {busy ? '…' : t('Ingresar', 'Sign in')}
+        </button>
+        <button type="button" onClick={forgot} style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', color: 'var(--ink-500)', fontSize: 12.5, cursor: 'pointer' }}>
+          {t('¿Olvidaste tu contraseña?', 'Forgot your password?')}
         </button>
       </form>
     </div>
@@ -279,6 +292,12 @@ function UsersManager() {
     } catch (e: any) { setNote(e.message); } finally { setBusy(false); }
   };
   const revoke = async (u: any) => { if (!window.confirm(t(`¿Revocar la invitación de ${u.phone}?`, `Revoke the invite for ${u.phone}?`))) return; await api.revokeUser(u.id); await load(); };
+  const resetPw = async (u: any) => {
+    if (!window.confirm(t(`¿Enviar un enlace de restablecimiento por WhatsApp a ${u.phone}?`, `Send a password reset link via WhatsApp to ${u.phone}?`))) return;
+    setNote('');
+    try { const r = await api.resetUserPassword(u.id); setNote(r.sent ? t('Enlace de restablecimiento enviado por WhatsApp ✓', 'Reset link sent via WhatsApp ✓') : t('Enlace generado (WhatsApp no enviado — revisa la configuración)', 'Link generated (WhatsApp not sent — check config)')); setTimeout(() => setNote(''), 4000); }
+    catch (e: any) { setNote(e.message); }
+  };
 
   return (
     <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -329,6 +348,9 @@ function UsersManager() {
                   <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {u.status === 'pending' && u.inviteUrl && (
                       <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => copy(u.inviteUrl)}>{t('Copiar enlace', 'Copy link')}</button>
+                    )}
+                    {u.status === 'active' && (
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => resetPw(u)}>{t('Restablecer contraseña', 'Reset password')}</button>
                     )}
                     {u.status === 'pending' && (
                       <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--red-ink, #d9342b)' }} onClick={() => revoke(u)}>✕</button>
@@ -2040,15 +2062,59 @@ export function App() {
 
   const logout = () => { auth.clear(); setMe(null); };
 
-  // staff invite acceptance link: /ops?invite=<token>
-  const inviteToken = useMemo(() => new URLSearchParams(window.location.search).get('invite'), []);
+  // staff invite acceptance link: /ops?invite=<token> ; password reset: /ops?reset=<token>
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const inviteToken = params.get('invite');
+  const resetToken = params.get('reset');
 
   return (
     <I18nCtx.Provider value={i18n}>
       {inviteToken
         ? <AcceptInvite token={inviteToken} />
+        : resetToken
+        ? <ResetPassword token={resetToken} />
         : !ready ? null : me ? <Shell me={me} onLogout={logout} /> : <Login onDone={loadMe} />}
     </I18nCtx.Provider>
+  );
+}
+
+// Public password-reset page (from a WhatsApp link: /ops?reset=<token>).
+function ResetPassword({ token }: { token: string }) {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  useEffect(() => { api.getReset(token).then(setInfo).catch((e) => setErr(e.message)); }, [token]);
+  const submit = async () => {
+    if (password.length < 6) { setErr(t('La contraseña debe tener 6+ caracteres.', 'Password must be 6+ characters.')); return; }
+    setBusy(true); setErr(null);
+    try { await api.resetPassword(token, password); setDone(true); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--paper)', padding: 16 }}>
+      <div className="card" style={{ width: 400, maxWidth: '100%', padding: 26 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand)' }} />
+          <span className="display" style={{ fontSize: 17, fontWeight: 600 }}>PasarEx<span style={{ color: 'var(--brand)' }}>LM</span></span>
+        </div>
+        {done ? (<>
+          <h1 className="display" style={{ fontSize: 22, margin: '0 0 8px' }}>{t('Contraseña actualizada', 'Password updated')}</h1>
+          <p style={{ fontSize: 14, color: 'var(--ink-600)' }}>{t('Ya puedes iniciar sesión con tu nueva contraseña.', 'You can now sign in with your new password.')}</p>
+          <a className="btn btn-primary btn-block" style={{ marginTop: 16, textDecoration: 'none' }} href="/ops">{t('Ir a Operaciones', 'Go to Ops')}</a>
+        </>) : err && !info ? (
+          <div className="badge badge-red" style={{ whiteSpace: 'normal', height: 'auto', padding: 10 }}>{err}</div>
+        ) : !info ? <div style={{ color: 'var(--ink-500)' }}>…</div> : (<>
+          <h1 className="display" style={{ fontSize: 22, margin: '0 0 4px' }}>{t('Nueva contraseña', 'New password')}</h1>
+          <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>{info.name}</div>
+          <label className="field-label">{t('Contraseña', 'Password')}</label>
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {err && <div className="badge badge-red" style={{ marginTop: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{err}</div>}
+          <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={busy} onClick={submit}>{busy ? '…' : t('Actualizar contraseña', 'Update password')}</button>
+        </>)}
+      </div>
+    </div>
   );
 }
 

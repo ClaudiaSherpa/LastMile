@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -24,6 +24,25 @@ export class AuthController {
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
+  }
+
+  // ── password reset (delivered via WhatsApp) ──
+  @Public()
+  @Post('forgot')
+  forgot(@Body() body: { username: string }) {
+    return this.auth.requestReset(body?.username);
+  }
+
+  @Public()
+  @Get('reset/:token')
+  getReset(@Param('token') token: string) {
+    return this.auth.getReset(token);
+  }
+
+  @Public()
+  @Post('reset/:token')
+  resetPassword(@Param('token') token: string, @Body() body: { password: string }) {
+    return this.auth.resetPassword(token, body?.password);
   }
 
   @Public()
