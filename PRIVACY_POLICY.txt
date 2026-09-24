@@ -1,0 +1,55 @@
+PASAREX LM — PRIVACY POLICY
+Driver platform (Barbados)
+Version: 2026-09-24
+
+How PasarEx LM collects, uses and protects your personal data. Shown in-app to
+drivers from the Welcome and Sign-in screens (Privacy policy link). The
+authoritative, displayed copy is the PRIVACY array in apps/driver/src/App.tsx
+(bilingual ES/EN); keep PRIVACY_VERSION in sync.
+
+=====
+
+1. WHO WE ARE
+PasarEx LM operates a last-mile delivery platform in Barbados. We are the
+controller of your personal data under the Barbados Data Protection Act, 2019.
+
+2. DATA WE COLLECT
+Identity and contact details (name, national ID, mobile, email, address),
+vehicle details, the documents and photos you upload (licence, insurance,
+registration, ID, utility bill, odometer photos), GPS location while you are on
+a route, and operational data (deliveries, packages, mileage, ratings).
+
+3. HOW WE USE YOUR DATA
+To verify your eligibility and background, assign you freight, coordinate and
+track deliveries, calculate your pay and DriverScore, communicate with you
+(including via WhatsApp), and meet legal obligations.
+
+4. LOCATION
+Your location is shared with Ops only while you have an active route, for
+delivery tracking. You can turn off location permission on your device, but this
+may prevent you from receiving or completing routes.
+
+5. WHO WE SHARE WITH
+With our Ops and security staff, with service providers who support us (WhatsApp
+messaging, OCR processing, hosting) under confidentiality obligations, and with
+authorities where required by law. We do not sell your data.
+
+6. RETENTION
+We keep your data while your account is active and for as long as needed to meet
+legal, accounting and dispute-resolution obligations; after that we delete or
+anonymize it.
+
+7. YOUR RIGHTS
+Under the Data Protection Act, 2019 you may access, correct, update or request
+deletion of your data, and object to certain processing. You can edit your
+profile in the app or contact us.
+
+8. SECURITY
+We protect your data with role-based access controls, encryption in transit
+(HTTPS) and restricted storage. No system is 100% secure, but we work to
+safeguard it.
+
+9. CHANGES & CONTACT
+We may update this policy; the new version will be posted in the app. To
+exercise your rights or raise privacy questions, contact us through PasarEx
+support channels.

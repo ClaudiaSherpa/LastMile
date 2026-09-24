@@ -67,6 +67,8 @@ function Toast({ msg }: { msg: string | null }) {
 // ── welcome ─────────────────────────────────────────────────────
 function Welcome({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => void }) {
   const { t } = useI18n();
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  if (showPrivacy) return <Privacy onBack={() => setShowPrivacy(false)} />;
   return (
     <Phone>
       <div style={{ padding: '54px 26px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -88,6 +90,7 @@ function Welcome({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => v
         <div style={{ marginTop: 'auto' }}>
           <button className="btn btn-primary btn-lg btn-block" onClick={onStart}>{t('Comenzar solicitud', 'Start application')}</button>
           <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={onSignIn}>{t('Ya soy conductor · Ingresar', 'Already a driver · Sign in')}</button>
+          <button type="button" onClick={() => setShowPrivacy(true)} style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', color: 'var(--ink-400)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>{t('Política de privacidad', 'Privacy policy')}</button>
         </div>
       </div>
     </Phone>
@@ -146,6 +149,66 @@ const TERMS = [
     bEs: 'PasarEx LM puede modificar estos Términos; el uso continuo implica aceptación. Estos Términos se rigen por las leyes de Barbados.',
     bEn: 'PasarEx LM may modify these Terms; continued use constitutes acceptance. These Terms are governed by the laws of Barbados.' },
 ];
+
+export const PRIVACY_VERSION = '2026-09-24';
+
+const PRIVACY = [
+  { es: '1. Quiénes somos', en: '1. Who we are',
+    bEs: 'PasarEx LM opera una plataforma de última milla en Barbados. Somos responsables del tratamiento de tus datos personales conforme a la Data Protection Act, 2019 de Barbados.',
+    bEn: 'PasarEx LM operates a last-mile delivery platform in Barbados. We are the controller of your personal data under the Barbados Data Protection Act, 2019.' },
+  { es: '2. Datos que recopilamos', en: '2. Data we collect',
+    bEs: 'Datos de identidad y contacto (nombre, documento nacional, celular, correo, dirección), datos del vehículo, documentos y fotos que cargas (licencia, seguro, registro, identidad, factura de servicios, fotos del odómetro), ubicación GPS mientras estás en ruta, e información operativa (entregas, paquetes, millaje, calificaciones).',
+    bEn: 'Identity and contact details (name, national ID, mobile, email, address), vehicle details, the documents and photos you upload (licence, insurance, registration, ID, utility bill, odometer photos), GPS location while you are on a route, and operational data (deliveries, packages, mileage, ratings).' },
+  { es: '3. Cómo usamos tus datos', en: '3. How we use your data',
+    bEs: 'Para verificar tu elegibilidad y antecedentes, asignarte fletes, coordinar y rastrear entregas, calcular tu pago y DriverScore, comunicarnos contigo (incluido WhatsApp) y cumplir obligaciones legales.',
+    bEn: 'To verify your eligibility and background, assign you freight, coordinate and track deliveries, calculate your pay and DriverScore, communicate with you (including via WhatsApp), and meet legal obligations.' },
+  { es: '4. Ubicación', en: '4. Location',
+    bEs: 'Tu ubicación se comparte con Operaciones únicamente mientras tienes una ruta activa, para seguimiento de la entrega. Puedes desactivar el permiso de ubicación en tu dispositivo, pero esto puede impedir recibir o completar rutas.',
+    bEn: 'Your location is shared with Ops only while you have an active route, for delivery tracking. You can turn off location permission on your device, but this may prevent you from receiving or completing routes.' },
+  { es: '5. Con quién compartimos', en: '5. Who we share with',
+    bEs: 'Con nuestro personal de Operaciones y seguridad, con proveedores que nos prestan servicios (mensajería WhatsApp, procesamiento OCR, alojamiento) bajo obligaciones de confidencialidad, y con autoridades cuando la ley lo exige. No vendemos tus datos.',
+    bEn: 'With our Ops and security staff, with service providers who support us (WhatsApp messaging, OCR processing, hosting) under confidentiality obligations, and with authorities where required by law. We do not sell your data.' },
+  { es: '6. Conservación', en: '6. Retention',
+    bEs: 'Conservamos tus datos mientras tu cuenta esté activa y durante el periodo necesario para cumplir obligaciones legales, contables y de resolución de disputas; luego los eliminamos o anonimizamos.',
+    bEn: 'We keep your data while your account is active and for as long as needed to meet legal, accounting and dispute-resolution obligations; after that we delete or anonymize it.' },
+  { es: '7. Tus derechos', en: '7. Your rights',
+    bEs: 'Bajo la Data Protection Act, 2019 puedes acceder, corregir, actualizar o solicitar la eliminación de tus datos, y oponerte a ciertos tratamientos. Puedes editar tu perfil en la app o contactarnos.',
+    bEn: 'Under the Data Protection Act, 2019 you may access, correct, update or request deletion of your data, and object to certain processing. You can edit your profile in the app or contact us.' },
+  { es: '8. Seguridad', en: '8. Security',
+    bEs: 'Protegemos tus datos con controles de acceso por rol, cifrado en tránsito (HTTPS) y almacenamiento restringido. Ningún sistema es 100% seguro, pero trabajamos para protegerlos.',
+    bEn: 'We protect your data with role-based access controls, encryption in transit (HTTPS) and restricted storage. No system is 100% secure, but we work to safeguard it.' },
+  { es: '9. Cambios y contacto', en: '9. Changes & contact',
+    bEs: 'Podemos actualizar esta política; publicaremos la nueva versión en la app. Para ejercer tus derechos o resolver dudas de privacidad, contáctanos por los canales de soporte de PasarEx.',
+    bEn: 'We may update this policy; the new version will be posted in the app. To exercise your rights or raise privacy questions, contact us through PasarEx support channels.' },
+];
+
+function Privacy({ onBack }: { onBack: () => void }) {
+  const { t, lang } = useI18n();
+  return (
+    <Phone>
+      <div style={{ paddingTop: 54 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 12px' }}>
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-700)' }}>‹</button>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', letterSpacing: '.08em' }}>PASAREX LM</span>
+          <LangToggle />
+        </div>
+        <div style={{ padding: '0 22px 8px' }}><h1 className="display" style={{ fontSize: 24, margin: 0 }}>{t('Política de privacidad', 'Privacy policy')}</h1></div>
+      </div>
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 24px' }}>
+        <p style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.5, marginTop: 0 }}>
+          {t('Cómo PasarEx LM recopila, usa y protege tus datos personales.', 'How PasarEx LM collects, uses and protects your personal data.')}
+        </p>
+        {PRIVACY.map((s, i) => (
+          <div key={i} style={{ marginBottom: 14 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{lang === 'es' ? s.es : s.en}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.5 }}>{lang === 'es' ? s.bEs : s.bEn}</div>
+          </div>
+        ))}
+        <p className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)' }}>{t('Versión', 'Version')} {PRIVACY_VERSION}</p>
+      </div>
+    </Phone>
+  );
+}
 
 function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | void; onBack: () => void }) {
   const { t, lang } = useI18n();
@@ -552,12 +615,14 @@ function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => voi
     e.preventDefault(); setBusy(true); setErr('');
     try { await api.login(phone.trim(), password); onDone(); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const forgot = async () => {
     if (!phone.trim()) { setErr(t('Ingresa tu celular primero.', 'Enter your mobile first.')); return; }
     setErr(''); setNote('');
     try { await api.forgotPassword(phone.trim()); setNote(t('Te enviamos un enlace por WhatsApp para restablecer tu contraseña.', 'We sent you a WhatsApp link to reset your password.')); }
     catch (e: any) { setErr(e.message); }
   };
+  if (showPrivacy) return <Privacy onBack={() => setShowPrivacy(false)} />;
   return (
     <Phone>
       <div style={{ paddingTop: 54 }}>
@@ -576,6 +641,7 @@ function DriverLogin({ onDone, onBack }: { onDone: () => void; onBack: () => voi
         {note && <div className="badge badge-brand" style={{ marginBottom: 12, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
         <button className="btn btn-primary btn-lg btn-block" style={{ marginTop: 'auto' }} disabled={busy || !phone || !password}>{busy ? '…' : t('Ingresar', 'Sign in')}</button>
         <button type="button" onClick={forgot} style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', color: 'var(--ink-500)', fontSize: 13, cursor: 'pointer' }}>{t('¿Olvidaste tu contraseña?', 'Forgot your password?')}</button>
+        <button type="button" onClick={() => setShowPrivacy(true)} style={{ display: 'block', margin: '8px auto 0', background: 'none', border: 'none', color: 'var(--ink-400)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>{t('Política de privacidad', 'Privacy policy')}</button>
       </form>
     </Phone>
   );
