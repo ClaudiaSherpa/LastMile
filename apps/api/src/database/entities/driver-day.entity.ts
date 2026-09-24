@@ -46,6 +46,13 @@ export class DriverDay {
   @Column({ type: 'double precision', nullable: true })
   startMileage?: number;
 
+  // odometer photos (storage keys) captured at start / end of the route
+  @Column({ nullable: true })
+  startMileagePhoto?: string;
+
+  @Column({ nullable: true })
+  endMileagePhoto?: string;
+
   // ── end of day (depot return) ──
   @Column({ type: 'timestamptz', nullable: true })
   depotReturnAt?: Date;

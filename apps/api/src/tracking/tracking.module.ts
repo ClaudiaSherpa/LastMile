@@ -7,6 +7,8 @@ import { TrackingSimulator } from './tracking.simulator';
 import { DriverDayService } from './driver-day.service';
 import { RatingsModule } from '../ratings/ratings.module';
 import { ScoringModule } from '../scoring/scoring.module';
+import { StorageService } from '../storage/storage.service';
+import { OcrService } from '../ocr/ocr.service';
 
 @Module({
   imports: [
@@ -15,7 +17,7 @@ import { ScoringModule } from '../scoring/scoring.module';
     ScoringModule,
   ],
   controllers: [TrackingController],
-  providers: [TrackingService, TrackingSimulator, DriverDayService],
+  providers: [TrackingService, TrackingSimulator, DriverDayService, StorageService, OcrService],
   exports: [TrackingService],
 })
 export class TrackingModule {}

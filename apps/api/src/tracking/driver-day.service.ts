@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DriverDay } from '../database/entities';
+import { StorageService } from '../storage/storage.service';
+import { OcrService } from '../ocr/ocr.service';
 
 // day-mileage sanity thresholds (km)
 const MILEAGE_WARN_KM = 100;
@@ -24,9 +26,48 @@ export interface CheckOutInput {
 
 @Injectable()
 export class DriverDayService {
-  constructor(@InjectRepository(DriverDay) private readonly days: Repository<DriverDay>) {}
+  constructor(
+    @InjectRepository(DriverDay) private readonly days: Repository<DriverDay>,
+    private readonly storage: StorageService,
+    private readonly ocr: OcrService,
+  ) {}
 
   private today() { return new Date().toISOString().slice(0, 10); }
+
+  /**
+   * Capture an odometer photo for the start or end of the route: store the image,
+   * OCR the reading, set the mileage + photo reference on the day-sheet.
+   */
+  async setOdometer(
+    driverId: string,
+    which: 'start' | 'end',
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+    operationalDate?: string,
+  ) {
+    if (!file) throw new BadRequestException('Photo is required');
+    if (which !== 'start' && which !== 'end') throw new BadRequestException('which must be start or end');
+    const d = await this.findOrCreate(driverId, operationalDate || this.today());
+    const stored = await this.storage.save(file.buffer, file.originalname, file.mimetype);
+    const read = await this.ocr.readOdometer(file.buffer, file.mimetype);
+    if (which === 'start') {
+      d.startMileagePhoto = stored.fileRef;
+      if (read.value != null) d.startMileage = read.value;
+    } else {
+      d.endMileagePhoto = stored.fileRef;
+      if (read.value != null) d.endMileage = read.value;
+    }
+    await this.days.save(d);
+    return { ...this.dto(d), ocr: { value: read.value, skipped: read.skipped, reason: read.reason }, which };
+  }
+
+  /** Read the stored odometer photo for a driver's day (own or Ops access). */
+  async odometerFile(driverId: string, which: 'start' | 'end', operationalDate?: string): Promise<{ buffer: Buffer; fileRef: string }> {
+    const d = await this.days.findOne({ where: { driverId, operationalDate: operationalDate || this.today() } });
+    const ref = which === 'end' ? d?.endMileagePhoto : d?.startMileagePhoto;
+    if (!ref) throw new NotFoundException('No odometer photo');
+    try { return { buffer: this.storage.read(ref), fileRef: ref }; }
+    catch { throw new NotFoundException('Photo missing from storage'); }
+  }
 
   private async findOrCreate(driverId: string, operationalDate: string): Promise<DriverDay> {
     let d = await this.days.findOne({ where: { driverId, operationalDate } });
@@ -99,6 +140,8 @@ export class DriverDayService {
       packagesPicked: d.packagesPicked,
       depotDepartureAt: d.depotDepartureAt,
       startMileage: d.startMileage,
+      startMileagePhoto: !!d.startMileagePhoto,
+      endMileagePhoto: !!d.endMileagePhoto,
       depotReturnAt: d.depotReturnAt,
       endMileage: d.endMileage,
       successfulDeliveries: d.successfulDeliveries,

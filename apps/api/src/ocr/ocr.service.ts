@@ -39,6 +39,48 @@ export class OcrService {
    * Run OCR auto-fill against an uploaded document. Returns normalized draft
    * fields. Never throws — degrades to { skipped } so manual entry still works.
    */
+  /**
+   * Read a vehicle odometer (mileage) from a photo. Returns the numeric reading
+   * or null. Never throws — degrades to { value: null, skipped } for manual entry.
+   */
+  async readOdometer(buffer: Buffer, mimeType: string): Promise<{ value: number | null; skipped: boolean; reason?: string; raw?: string }> {
+    if (!this.enabled) return { value: null, skipped: true, reason: 'no_api_key' };
+    if (!mimeType.startsWith('image/')) return { value: null, skipped: true, reason: 'unsupported_mime' };
+    const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+    const prompt =
+      `You are reading a vehicle odometer from a dashboard photo. ` +
+      `Return ONLY a compact JSON object: {"odometer": <number>} where the value is the ` +
+      `total distance shown on the odometer as a plain number (ignore trip meters, units and decimals` +
+      ` unless the whole reading is decimal). If you cannot read it, return {"odometer": null}. No prose.`;
+    try {
+      const res = await fetch(`${env.ocr.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.ocr.apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://pasarex.com',
+          'X-Title': 'PasarEx LM Odometer OCR',
+        },
+        body: JSON.stringify({
+          model: env.ocr.model,
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+        }),
+      });
+      if (!res.ok) return { value: null, skipped: false, reason: `http_${res.status}` };
+      const json: any = await res.json();
+      const text: string = json?.choices?.[0]?.message?.content ?? '';
+      let value: number | null = null;
+      try { const parsed = JSON.parse(text); const n = Number(String(parsed?.odometer ?? '').replace(/[^\d.]/g, '')); value = Number.isFinite(n) && n > 0 ? n : null; } catch { value = null; }
+      this.logger.log(`odometer OCR → ${value}`);
+      return { value, skipped: false, raw: text };
+    } catch (e: any) {
+      this.logger.error(`odometer OCR failed: ${e.message}`);
+      return { value: null, skipped: false, reason: 'exception' };
+    }
+  }
+
   async extract(buffer: Buffer, mimeType: string, docTypeKey: string): Promise<OcrResult> {
     if (!this.enabled) {
       return { ok: true, skipped: true, reason: 'no_api_key', fields: {} };

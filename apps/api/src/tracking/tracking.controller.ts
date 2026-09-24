@@ -1,10 +1,16 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, Post, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
+import * as path from 'path';
 import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { DeliveryStatus, Role } from '@sherpa/shared';
 import { JwtPayload } from '@sherpa/shared';
 import { CurrentUser, Public, Roles } from '../auth/decorators';
 import { TrackingService } from './tracking.service';
 import { DriverDayService } from './driver-day.service';
+
+const IMG_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
+const imgMimeFor = (ref: string) => IMG_MIME[path.extname(ref).toLowerCase()] ?? 'application/octet-stream';
 
 class PingDto {
   @IsNumber() lat: number;
@@ -63,6 +69,35 @@ export class TrackingController {
   @Roles(Role.DRIVER)
   checkOut(@CurrentUser() user: JwtPayload, @Body() dto: CheckOutDto) {
     return this.driverDay.checkOut(this.did(user), dto);
+  }
+
+  /** Capture an odometer photo (which=start|end); OCR fills the mileage. */
+  @Post('driver/day/odometer')
+  @Roles(Role.DRIVER)
+  @UseInterceptors(FileInterceptor('file'))
+  odometer(@CurrentUser() user: JwtPayload, @UploadedFile() file: any, @Body() body: { which: 'start' | 'end'; operationalDate?: string }) {
+    if (!file) throw new BadRequestException('file is required');
+    return this.driverDay.setOdometer(this.did(user), body.which, file, body.operationalDate);
+  }
+
+  /** The driver views their own odometer photo. */
+  @Get('driver/day/odometer/:which/file')
+  @Roles(Role.DRIVER)
+  async myOdometer(@CurrentUser() user: JwtPayload, @Param('which') which: 'start' | 'end', @Query('date') date: string, @Res() res: Response) {
+    const { buffer, fileRef } = await this.driverDay.odometerFile(this.did(user), which, date);
+    res.setHeader('Content-Type', imgMimeFor(fileRef));
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buffer);
+  }
+
+  /** Ops views a driver's odometer photo. */
+  @Get('drivers/:id/day/odometer/:which/file')
+  @Roles(Role.ADMIN, Role.DISPATCHER, Role.SECURITY_OFFICER)
+  async driverOdometer(@Param('id') id: string, @Param('which') which: 'start' | 'end', @Query('date') date: string, @Res() res: Response) {
+    const { buffer, fileRef } = await this.driverDay.odometerFile(id, which, date);
+    res.setHeader('Content-Type', imgMimeFor(fileRef));
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buffer);
   }
 
   /** Driver GPS stream. Authenticated driver only; identity comes from the JWT, not the body. */

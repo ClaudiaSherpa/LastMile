@@ -85,6 +85,12 @@ export const api = {
     }>(`/drivers/${id}/documents`),
   driverDayStats: (id: string) => request<any>(`/drivers/${id}/day-stats`),
   driverPlans: (id: string) => request<any[]>(`/drivers/${id}/plans`),
+  dayOdometerBlob: async (driverId: string, which: 'start' | 'end', date: string, retry = true): Promise<Blob> => {
+    const res = await fetch(`${BASE}/drivers/${driverId}/day/odometer/${which}/file?date=${date}`, { headers: auth.access ? { Authorization: `Bearer ${auth.access}` } : {} });
+    if (res.status === 401 && retry && auth.refresh && (await tryRefresh())) return api.dayOdometerBlob(driverId, which, date, false);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.blob();
+  },
   // document review queue (admin + security officer)
   documentReviews: () => request<any[]>('/document-reviews'),
   documentReviewCount: () => request<{ pending: number }>('/document-reviews/count'),

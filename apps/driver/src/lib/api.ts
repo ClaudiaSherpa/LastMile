@@ -124,6 +124,17 @@ export const api = {
     return res.json();
   },
   getDay: (date?: string) => aj<any>(`/driver/day${date ? `?date=${date}` : ''}`),
+  uploadOdometer: async (which: 'start' | 'end', file: File, date?: string) => {
+    const a = driverAuth.get();
+    const fd = new FormData();
+    fd.append('which', which);
+    if (date) fd.append('operationalDate', date);
+    fd.append('file', file);
+    const res = await fetch(`${BASE}/driver/day/odometer`, { method: 'POST', headers: a ? { Authorization: `Bearer ${a.accessToken}` } : {}, body: fd });
+    if (res.status === 401) { driverAuth.clear(); throw new Error('Session expired'); }
+    if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || `HTTP ${res.status}`); }
+    return res.json();
+  },
   dayCheckIn: (b: any) => aj<any>('/driver/day/checkin', { method: 'POST', body: JSON.stringify(b) }),
   dayCheckOut: (b: any) => aj<any>('/driver/day/checkout', { method: 'POST', body: JSON.stringify(b) }),
 };

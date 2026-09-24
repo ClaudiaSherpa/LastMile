@@ -1348,6 +1348,10 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
     } catch (e: any) { setMsgNote(e.message); } finally { setMsgBusy(false); }
   };
 
+  const openOdo = async (which: 'start' | 'end', date: string) => {
+    try { const blob = await api.dayOdometerBlob(driverId, which, date); window.open(URL.createObjectURL(blob), '_blank'); } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     let live = true;
     setStats(null); setDocs(null); setDayStats(null); setPlans(null); setErr(false); setViewDoc(null);
@@ -1425,6 +1429,19 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
             <StatTile label={t('Millaje total', 'Total mileage')} value={dayStats.mileage} accent="var(--blue-ink)" />
           </div>
         ))}
+
+      {dayStats?.recent?.some((r: any) => r.startMileagePhoto || r.endMileagePhoto) && (<>
+        <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Fotos del odómetro', 'Odometer photos')}</div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {dayStats.recent.filter((r: any) => r.startMileagePhoto || r.endMileagePhoto).map((r: any) => (
+            <div key={r.operationalDate} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+              <span className="mono" style={{ flex: 1, color: 'var(--ink-500)' }}>{r.operationalDate}</span>
+              {r.startMileagePhoto && <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => openOdo('start', r.operationalDate)}>📷 {t('Inicio', 'Start')} {r.startMileage ?? ''}</button>}
+              {r.endMileagePhoto && <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => openOdo('end', r.operationalDate)}>📷 {t('Fin', 'End')} {r.endMileage ?? ''}</button>}
+            </div>
+          ))}
+        </div>
+      </>)}
 
       <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Planes de entrega', 'Delivery plans')}</div>
       {!plans && <div style={{ color: 'var(--ink-500)', fontSize: 13 }}>…</div>}

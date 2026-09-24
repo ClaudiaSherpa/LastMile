@@ -601,6 +601,20 @@ function DaySheet() {
 
   const dayKm = (() => { const s = num(f.startKm), e = num(f.endKm); return s != null && e != null ? Math.round((e - s) * 10) / 10 : null; })();
 
+  const onOdo = async (which: 'start' | 'end', file?: File) => {
+    if (!file) return;
+    setBusy(`odo-${which}`); setMsg(null);
+    try {
+      const r = await api.uploadOdometer(which, file, dateOf);
+      const km = which === 'start' ? r.startMileage : r.endMileage;
+      if (km != null) set(which === 'start' ? 'startKm' : 'endKm', String(km));
+      await load();
+      setMsg({ type: r.ocr?.value != null ? 'ok' : 'warn', text: r.ocr?.value != null
+        ? t(`Foto guardada · millaje leído: ${r.ocr.value}`, `Photo saved · mileage read: ${r.ocr.value}`)
+        : t('Foto guardada · ingresa el millaje manualmente', 'Photo saved · enter the mileage manually') });
+    } catch (e: any) { setMsg({ type: 'err', text: e.message }); } finally { setBusy(''); }
+  };
+
   const checkIn = async () => {
     setBusy('in'); setMsg(null);
     try {
@@ -668,6 +682,11 @@ function DaySheet() {
         {cell(t('Hora de salida', 'Departure time'), timeIn('departure'))}
         {cell(t('Millaje inicial', 'Start mileage'), numIn('startKm'))}
       </div>
+      <label className="btn btn-ghost btn-block" style={{ marginBottom: 8, cursor: 'pointer' }}>
+        {busy === 'odo-start' ? '…' : `📷 ${day?.startMileagePhoto ? t('Reemplazar foto del odómetro', 'Replace odometer photo') : t('Foto del odómetro (inicio)', 'Odometer photo (start)')}`}
+        {day?.startMileagePhoto && <span style={{ color: 'var(--brand-ink)', marginLeft: 6 }}>✓</span>}
+        <input type="file" accept="image/*" capture="environment" hidden disabled={!!busy} onChange={(e) => { onOdo('start', e.target.files?.[0]); e.currentTarget.value = ''; }} />
+      </label>
       <button className="btn btn-ghost btn-block" disabled={busy === 'in'} onClick={checkIn}>{busy === 'in' ? '…' : t('Guardar llegada', 'Save check-in')}</button>
 
       <div className="eyebrow" style={{ margin: '16px 0 8px', color: 'var(--brand-ink)' }}>{t('Fin del día', 'End of day')}</div>
@@ -677,6 +696,11 @@ function DaySheet() {
         {cell(t('Paquetes entregados', 'Packages delivered'), numIn('success'))}
         {cell(t('Paquetes devueltos', 'Packages returned'), numIn('returned'))}
       </div>
+      <label className="btn btn-ghost btn-block" style={{ marginBottom: 8, cursor: 'pointer' }}>
+        {busy === 'odo-end' ? '…' : `📷 ${day?.endMileagePhoto ? t('Reemplazar foto del odómetro', 'Replace odometer photo') : t('Foto del odómetro (fin)', 'Odometer photo (end)')}`}
+        {day?.endMileagePhoto && <span style={{ color: 'var(--brand-ink)', marginLeft: 6 }}>✓</span>}
+        <input type="file" accept="image/*" capture="environment" hidden disabled={!!busy} onChange={(e) => { onOdo('end', e.target.files?.[0]); e.currentTarget.value = ''; }} />
+      </label>
       <button className="btn btn-ghost btn-block" disabled={busy === 'out'} onClick={checkOut}>{busy === 'out' ? '…' : t('Guardar fin del día', 'Save end of day')}</button>
       {dayKm != null && (
         <div style={{ fontSize: 12, marginTop: 10, textAlign: 'center', color: dayKm > 200 ? 'var(--red-ink, #b3261e)' : dayKm > 100 ? 'var(--amber-ink, #7a5a00)' : 'var(--ink-500)' }}>
