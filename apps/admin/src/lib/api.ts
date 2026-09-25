@@ -30,6 +30,10 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (res.status === 401 && retry && auth.refresh) {
     const ok = await tryRefresh();
     if (ok) return request<T>(path, init, false);
+    // refresh failed → the session is dead; drop tokens and return to sign-in
+    auth.clear();
+    if (typeof window !== 'undefined') window.location.reload();
+    throw new Error('Session expired — please sign in again');
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

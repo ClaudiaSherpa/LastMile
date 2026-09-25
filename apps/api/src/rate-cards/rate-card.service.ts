@@ -9,6 +9,7 @@ export interface PayEstimate {
   perPackage: number;
   perWeight: number;
   perKm: number;
+  bonus: number;
   metMinimum: boolean;
   lowVolume: boolean;
   packages: number;
@@ -62,7 +63,7 @@ export class RateCardService {
   // whitelist of numeric/flag fields to copy
   private clean(input: Partial<RateCard>): Partial<RateCard> {
     const out: any = {};
-    for (const k of ['active', 'isDefault', 'validFrom', 'validTo', 'minPackages', 'fixedRate', 'ratePerPackage', 'ratePerKg', 'ratePerKm', 'avgWeightKg', 'avgDistanceKm', 'lowVolumeThreshold', 'lowVolumeRatePerPackage'] as const) {
+    for (const k of ['active', 'isDefault', 'validFrom', 'validTo', 'minPackages', 'fixedRate', 'ratePerPackage', 'ratePerKg', 'ratePerKm', 'avgWeightKg', 'avgDistanceKm', 'lowVolumeThreshold', 'lowVolumeRatePerPackage', 'bonusThreshold', 'bonusAmount'] as const) {
       if (input[k] !== undefined) out[k] = input[k];
     }
     return out;
@@ -99,10 +100,12 @@ export class RateCardService {
       rateCard: { id: card.id, name: card.name },
     };
 
+    const bonus = card.bonusThreshold > 0 && packages >= card.bonusThreshold ? round(card.bonusAmount) : 0;
+
     // low-volume routes: flat fixed rate per package (no day rate / kg / km)
     if (card.lowVolumeThreshold > 0 && packages < card.lowVolumeThreshold) {
       const perPackage = round(packages * card.lowVolumeRatePerPackage);
-      return { ...base, total: perPackage, fixed: 0, perPackage, perWeight: 0, perKm: 0, metMinimum: false, lowVolume: true };
+      return { ...base, total: round(perPackage + bonus), fixed: 0, perPackage, perWeight: 0, perKm: 0, bonus, metMinimum: false, lowVolume: true };
     }
 
     const metMinimum = packages >= (card.minPackages || 0);
@@ -110,6 +113,6 @@ export class RateCardService {
     const perPackage = round(packages * card.ratePerPackage);
     const perWeight = round(weightKg * card.ratePerKg);
     const perKm = round(distanceKm * card.ratePerKm);
-    return { ...base, total: round(fixed + perPackage + perWeight + perKm), fixed, perPackage, perWeight, perKm, metMinimum, lowVolume: false };
+    return { ...base, total: round(fixed + perPackage + perWeight + perKm + bonus), fixed, perPackage, perWeight, perKm, bonus, metMinimum, lowVolume: false };
   }
 }

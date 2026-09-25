@@ -1124,8 +1124,8 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{t('Pago estimado', 'Estimated pay')}: {o.estimate.currency || 'BBD'} {o.estimate.total}</div>
                 <div className="mono" style={{ fontSize: 10.5, opacity: 0.85, marginTop: 2 }}>
                   {o.estimate.lowVolume
-                    ? t('bajo volumen · tarifa plana/paquete', 'low volume · flat rate/package')
-                    : `${o.estimate.currency || 'BBD'} ${o.estimate.fixed} ${o.estimate.metMinimum ? t('fija', 'fixed') : t('media', 'half')} · ${o.estimate.perPackage} ${t('paq', 'pkg')} · ${o.estimate.perWeight} kg · ${o.estimate.perKm} km`}
+                    ? `${t('bajo volumen · tarifa plana/paquete', 'low volume · flat rate/package')}${o.estimate.bonus ? ` · +${o.estimate.bonus} ${t('bono', 'bonus')}` : ''}`
+                    : `${o.estimate.currency || 'BBD'} ${o.estimate.fixed} ${o.estimate.metMinimum ? t('fija', 'fixed') : t('media', 'half')} · ${o.estimate.perPackage} ${t('paq', 'pkg')} · ${o.estimate.perWeight} kg · ${o.estimate.perKm} km${o.estimate.bonus ? ` · +${o.estimate.bonus} ${t('bono', 'bonus')}` : ''}`}
                 </div>
               </div>
             )}

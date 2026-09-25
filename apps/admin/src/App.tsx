@@ -140,6 +140,8 @@ const RC_NUM: [string, string, string][] = [
   ['ratePerKm', 'Tarifa/km ($)', 'Rate/km ($)'],
   ['lowVolumeThreshold', 'Umbral bajo volumen (paq)', 'Low-volume threshold (pkgs)'],
   ['lowVolumeRatePerPackage', 'Tarifa fija/paq bajo vol. ($)', 'Flat rate/pkg low-vol ($)'],
+  ['bonusThreshold', 'Umbral de bono (paq)', 'Bonus threshold (pkgs)'],
+  ['bonusAmount', 'Monto del bono ($)', 'Bonus amount ($)'],
   ['avgWeightKg', 'Peso prom./paquete (kg)', 'Avg weight/package (kg)'],
   ['avgDistanceKm', 'Distancia prom. (km)', 'Avg distance (km)'],
 ];
@@ -154,7 +156,7 @@ function RateCards({ role }: { role?: string }) {
   const load = () => api.rateCards().then(setRows).catch(() => setRows([]));
   useEffect(() => { load(); }, []);
 
-  const blank = () => ({ name: '', currency: 'BBD', active: true, isDefault: false, validFrom: '', validTo: '', minPackages: 0, fixedRate: 0, ratePerPackage: 0, ratePerKg: 0, ratePerKm: 0, lowVolumeThreshold: 0, lowVolumeRatePerPackage: 0, avgWeightKg: 0, avgDistanceKm: 0 });
+  const blank = () => ({ name: '', currency: 'BBD', active: true, isDefault: false, validFrom: '', validTo: '', minPackages: 0, fixedRate: 0, ratePerPackage: 0, ratePerKg: 0, ratePerKm: 0, lowVolumeThreshold: 0, lowVolumeRatePerPackage: 0, bonusThreshold: 0, bonusAmount: 0, avgWeightKg: 0, avgDistanceKm: 0 });
   const cur = (c: any) => c?.currency || 'BBD';
   const money = (n: number, c: any) => `${cur(c)} ${n}`;
   const startNew = () => setEditing(blank());
@@ -176,16 +178,17 @@ function RateCards({ role }: { role?: string }) {
   // live estimate preview for a sample tender
   const [sample, setSample] = useState(80);
   const est = (c: any) => {
+    const bonus = c.bonusThreshold > 0 && sample >= c.bonusThreshold ? c.bonusAmount : 0;
     if (c.lowVolumeThreshold > 0 && sample < c.lowVolumeThreshold) {
       const pkg = sample * c.lowVolumeRatePerPackage;
-      return { lowVol: true, met: false, fixed: 0, pkg, wt: 0, km: 0, total: Math.round(pkg * 100) / 100 };
+      return { lowVol: true, met: false, fixed: 0, pkg, wt: 0, km: 0, bonus, total: Math.round((pkg + bonus) * 100) / 100 };
     }
     const met = sample >= (c.minPackages || 0);
     const fixed = met ? c.fixedRate : c.fixedRate / 2;
     const pkg = sample * c.ratePerPackage;
     const wt = sample * c.avgWeightKg * c.ratePerKg;
     const km = c.avgDistanceKm * c.ratePerKm;
-    return { lowVol: false, met, fixed, pkg, wt, km, total: Math.round((fixed + pkg + wt + km) * 100) / 100 };
+    return { lowVol: false, met, fixed, pkg, wt, km, bonus, total: Math.round((fixed + pkg + wt + km + bonus) * 100) / 100 };
   };
 
   return (
@@ -220,13 +223,14 @@ function RateCards({ role }: { role?: string }) {
                 <span>· {money(c.ratePerKg, c)}/kg</span>
                 <span>· {money(c.ratePerKm, c)}/km</span>
                 {c.lowVolumeThreshold > 0 && <span style={{ color: 'var(--brand-ink)' }}>· {t('bajo vol.', 'low-vol')} &lt;{c.lowVolumeThreshold} {t('paq', 'pkg')}: {money(c.lowVolumeRatePerPackage, c)}/{t('paq', 'pkg')} {t('plano', 'flat')}</span>}
+                {c.bonusThreshold > 0 && <span style={{ color: 'var(--brand-ink)' }}>· {t('bono', 'bonus')} ≥{c.bonusThreshold} {t('paq', 'pkg')}: +{money(c.bonusAmount, c)}</span>}
                 <span className="mono" style={{ color: 'var(--ink-400)' }}>· ~{c.avgWeightKg}kg/{t('paq', 'pkg')}, {c.avgDistanceKm}km</span>
               </div>
               <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 9, fontSize: 12.5 }}>
                 {t('Estimado', 'Estimate')} @ {sample} {t('paq', 'pkgs')}: <b>{money(e.total, c)}</b>
                 {e.lowVol
                   ? <span className="mono" style={{ color: 'var(--brand-ink)' }}> = {money(Math.round(e.pkg * 100) / 100, c)} ({t('bajo volumen: tarifa plana/paq', 'low volume: flat rate/pkg')})</span>
-                  : <span className="mono" style={{ color: 'var(--ink-500)' }}> = {money(e.fixed, c)} {e.met ? t('(fija)', '(full)') : t('(media)', '(half)')} + {money(Math.round(e.pkg * 100) / 100, c)} + {money(Math.round(e.wt * 100) / 100, c)} + {money(Math.round(e.km * 100) / 100, c)}</span>}
+                  : <span className="mono" style={{ color: 'var(--ink-500)' }}> = {money(e.fixed, c)} {e.met ? t('(fija)', '(full)') : t('(media)', '(half)')} + {money(Math.round(e.pkg * 100) / 100, c)} + {money(Math.round(e.wt * 100) / 100, c)} + {money(Math.round(e.km * 100) / 100, c)}{e.bonus ? ` + ${money(e.bonus, c)} ${t('bono', 'bonus')}` : ''}</span>}
               </div>
             </div>
           );

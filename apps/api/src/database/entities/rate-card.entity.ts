@@ -55,6 +55,13 @@ export class RateCard {
   @Column({ type: 'double precision', default: 0 })
   lowVolumeRatePerPackage: number;
 
+  // bonus: a flat amount added when packages delivered reach bonusThreshold (0 disables)
+  @Column({ type: 'int', default: 0 })
+  bonusThreshold: number;
+
+  @Column({ type: 'double precision', default: 0 })
+  bonusAmount: number;
+
   // estimate assumptions (admin-only)
   @Column({ type: 'double precision', default: 0 })
   avgWeightKg: number; // average weight per package
