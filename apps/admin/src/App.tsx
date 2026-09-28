@@ -97,12 +97,14 @@ const TABS = [
   ['messages', 'Mensajes', 'Messages'],
   ['users', 'Usuarios', 'Users'],
   ['ratecards', 'Tarifas', 'Rate cards'],
+  ['legal', 'Legal', 'Legal'],
   ['config', 'Configuración', 'Config'],
 ] as const;
 
 // tabs only some roles may open (others are visible to all staff)
 const TAB_ROLES: Record<string, string[]> = {
   config: ['admin'],
+  legal: ['admin', 'dispatcher', 'security_officer'],
   users: ['admin'],
   ratecards: ['admin', 'dispatcher'],
   messages: ['admin', 'dispatcher'],
@@ -268,6 +270,179 @@ function RateCards({ role }: { role?: string }) {
             <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>{t('Cancelar', 'Cancel')}</button>
             <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={save}>{busy ? '…' : t('Guardar', 'Save')}</button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── legal documents (terms / privacy / requirements) — versioned & auditable ──
+const LEGAL_TYPES: [string, string, string][] = [
+  ['terms', 'Términos de servicio', 'Terms of service'],
+  ['privacy', 'Política de privacidad', 'Privacy notice'],
+  ['requirements', 'Requisitos', 'Requirements'],
+];
+
+function Legal({ role }: { role?: string }) {
+  const { t, lang } = useI18n();
+  const canEdit = role === 'admin';
+  const [type, setType] = useState<string>('terms');
+  const [current, setCurrent] = useState<Record<string, any>>({});
+  const [sections, setSections] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[] | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  const loadList = () =>
+    api.legalList().then((rows) => {
+      const map: Record<string, any> = {};
+      for (const r of rows) map[r.type] = r;
+      setCurrent(map);
+      return map;
+    }).catch(() => ({} as Record<string, any>));
+
+  // load current sections for the selected type
+  useEffect(() => {
+    let alive = true;
+    setNote(''); setDirty(false); setShowHistory(false); setHistory(null);
+    loadList().then((map) => {
+      if (!alive) return;
+      const doc = map[type];
+      setSections((doc?.sections ?? []).map((s: any) => ({ titleEs: s.titleEs || '', titleEn: s.titleEn || '', bodyEs: s.bodyEs || '', bodyEn: s.bodyEn || '' })));
+    });
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type]);
+
+  const setSec = (i: number, k: string, v: string) => { setSections((ss) => ss.map((s, j) => (j === i ? { ...s, [k]: v } : s))); setDirty(true); };
+  const addSec = () => { setSections((ss) => [...ss, { titleEs: '', titleEn: '', bodyEs: '', bodyEn: '' }]); setDirty(true); };
+  const delSec = (i: number) => { setSections((ss) => ss.filter((_, j) => j !== i)); setDirty(true); };
+  const move = (i: number, dir: -1 | 1) => {
+    setSections((ss) => { const j = i + dir; if (j < 0 || j >= ss.length) return ss; const c = [...ss]; [c[i], c[j]] = [c[j], c[i]]; return c; });
+    setDirty(true);
+  };
+
+  const openHistory = async () => {
+    setShowHistory(true);
+    setHistory(null);
+    try { setHistory(await api.legalVersions(type)); } catch { setHistory([]); }
+  };
+
+  const publish = async () => {
+    const clean = sections
+      .map((s) => ({ titleEs: s.titleEs.trim(), titleEn: s.titleEn.trim(), bodyEs: s.bodyEs.trim(), bodyEn: s.bodyEn.trim() }))
+      .filter((s) => s.titleEs || s.titleEn || s.bodyEs || s.bodyEn);
+    if (!clean.length) { setNote(t('Se requiere al menos una sección.', 'At least one section is required.')); return; }
+    if (!window.confirm(t('Publicar una nueva versión? La versión anterior se conserva en el historial.', 'Publish a new version? The previous version is kept in history.'))) return;
+    setBusy(true); setNote('');
+    try {
+      await api.legalPublish(type, clean);
+      await loadList();
+      setDirty(false);
+      setNote(t('Publicado ✓', 'Published ✓'));
+      setTimeout(() => setNote(''), 3000);
+      if (showHistory) openHistory();
+    } catch (e: any) { setNote(e.message); } finally { setBusy(false); }
+  };
+
+  const restore = (v: any) => {
+    setSections((v.sections ?? []).map((s: any) => ({ titleEs: s.titleEs || '', titleEn: s.titleEn || '', bodyEs: s.bodyEs || '', bodyEn: s.bodyEn || '' })));
+    setDirty(true);
+    setShowHistory(false);
+    setNote(t(`Cargada la versión ${v.version} en el editor — publícala para hacerla vigente.`, `Loaded version ${v.version} into the editor — publish it to make it current.`));
+  };
+
+  const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleString(lang === 'es' ? 'es' : 'en-GB', { timeZone: 'America/Barbados', dateStyle: 'medium', timeStyle: 'short' }) : '—');
+  const cur = current[type];
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      {/* type selector */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {LEGAL_TYPES.map(([id, es, en]) => (
+          <button key={id} onClick={() => setType(id)} className="btn"
+            style={{ padding: '7px 14px', fontWeight: 600, fontSize: 13.5,
+              background: type === id ? 'var(--brand)' : 'var(--surface-2)', color: type === id ? '#063' : 'var(--ink-600)', border: '1px solid var(--line)' }}>
+            {t(es, en)}{current[id] ? <span className="mono" style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>v{current[id].version}</span> : null}
+          </button>
+        ))}
+        <button className="btn btn-ghost" style={{ marginLeft: 'auto', padding: '6px 12px', fontSize: 12.5 }} onClick={openHistory}>{t('Historial / auditoría', 'History / audit')}</button>
+      </div>
+
+      {cur && (
+        <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>
+          {t('Versión vigente', 'Current version')} v{cur.version ?? '—'} · {t('publicada', 'published')} {fmtDate(cur.publishedAt)}{cur.publishedBy ? ` · ${cur.publishedBy}` : ''}
+        </div>
+      )}
+
+      {/* editor */}
+      <div style={{ display: 'grid', gap: 12 }}>
+        {sections.map((s, i) => (
+          <div key={i} className="card" style={{ padding: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--ink-400)' }}>#{i + 1}</span>
+              {canEdit && <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12 }} disabled={i === sections.length - 1} onClick={() => move(i, 1)}>↓</button>
+                <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 12, color: 'var(--red-ink, #d9342b)' }} onClick={() => delSec(i)}>✕</button>
+              </span>}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label className="field-label">{t('Título (ES)', 'Title (ES)')}</label>
+                <input className="input" value={s.titleEs} disabled={!canEdit} onChange={(e) => setSec(i, 'titleEs', e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">{t('Título (EN)', 'Title (EN)')}</label>
+                <input className="input" value={s.titleEn} disabled={!canEdit} onChange={(e) => setSec(i, 'titleEn', e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">{t('Texto (ES)', 'Body (ES)')}</label>
+                <textarea className="input" rows={3} value={s.bodyEs} disabled={!canEdit} onChange={(e) => setSec(i, 'bodyEs', e.target.value)} style={{ resize: 'vertical', lineHeight: 1.45 }} />
+              </div>
+              <div>
+                <label className="field-label">{t('Texto (EN)', 'Body (EN)')}</label>
+                <textarea className="input" rows={3} value={s.bodyEn} disabled={!canEdit} onChange={(e) => setSec(i, 'bodyEn', e.target.value)} style={{ resize: 'vertical', lineHeight: 1.45 }} />
+              </div>
+            </div>
+          </div>
+        ))}
+        {!sections.length && <div className="card" style={{ padding: 20, color: 'var(--ink-500)' }}>{t('Sin secciones.', 'No sections.')}</div>}
+      </div>
+
+      {canEdit && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost" onClick={addSec}>+ {t('Sección', 'Section')}</button>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+            {note && <span className={note.includes('✓') ? 'badge badge-blue' : 'badge badge-red'} style={{ whiteSpace: 'normal', height: 'auto', padding: '6px 10px' }}>{note}</span>}
+            {dirty && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)' }}>{t('cambios sin publicar', 'unpublished changes')}</span>}
+            <button className="btn btn-primary" disabled={busy || !dirty} onClick={publish}>{busy ? '…' : t('Publicar nueva versión', 'Publish new version')}</button>
+          </span>
+        </div>
+      )}
+      {!canEdit && <div className="mono" style={{ fontSize: 12, color: 'var(--ink-500)' }}>{t('Solo lectura — un administrador puede editar.', 'Read-only — an admin can edit.')}</div>}
+
+      {/* version history / audit */}
+      {showHistory && (
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+            <span className="eyebrow">{t('Historial de versiones', 'Version history')}</span>
+            <button className="btn btn-ghost" style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 12 }} onClick={() => setShowHistory(false)}>✕</button>
+          </div>
+          {!history && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+          {history && !history.length && <div style={{ color: 'var(--ink-500)' }}>{t('Sin historial.', 'No history.')}</div>}
+          {history && history.map((v) => (
+            <div key={v.version} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: '1px solid var(--line)' }}>
+              <span className="mono" style={{ fontWeight: 700 }}>v{v.version}</span>
+              {v.current && <span className="badge badge-brand">{t('vigente', 'current')}</span>}
+              <span style={{ fontSize: 12.5, color: 'var(--ink-600)' }}>{fmtDate(v.publishedAt)}</span>
+              <span className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)' }}>{v.publishedBy || '—'}</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--ink-400)' }}>{v.sections?.length ?? 0} {t('secc.', 'sec.')}</span>
+              {canEdit && !v.current && <button className="btn btn-ghost" style={{ marginLeft: 'auto', padding: '3px 10px', fontSize: 12 }} onClick={() => restore(v)}>{t('Cargar en editor', 'Load into editor')}</button>}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -977,6 +1152,7 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           {tab === 'messages' && <Messages />}
           {tab === 'users' && <UsersManager />}
           {tab === 'ratecards' && <RateCards role={me?.role} />}
+          {tab === 'legal' && <Legal role={me?.role} />}
           {tab === 'config' && <Config />}
         </div>
       </div>

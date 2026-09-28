@@ -11,3 +11,4 @@ export * from './delivery-plan.entity';
 export * from './driver-day.entity';
 export * from './driver-group.entity';
 export * from './rate-card.entity';
+export * from './legal-document.entity';

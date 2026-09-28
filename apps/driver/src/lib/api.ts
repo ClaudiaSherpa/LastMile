@@ -68,6 +68,7 @@ export const api = {
   track: (token: string) => j<any>(`/track/${token}`),
   submitRating: (token: string, stars: number, feedback?: string) =>
     j<any>('/ratings', { method: 'POST', body: JSON.stringify({ token, stars, feedback }) }),
+  legal: (type: 'terms' | 'privacy' | 'requirements') => j<{ type: string; version: number; sections: { titleEn: string; titleEs: string; bodyEn: string; bodyEs: string }[]; publishedAt: string }>(`/legal/${type}`),
   forgotPassword: (username: string) => j<any>('/auth/forgot', { method: 'POST', body: JSON.stringify({ username }) }),
   getReset: (token: string) => j<{ ok: boolean; name: string }>(`/auth/reset/${token}`),
   resetPassword: (token: string, password: string) => j<any>(`/auth/reset/${token}`, { method: 'POST', body: JSON.stringify({ password }) }),

@@ -173,6 +173,10 @@ export const api = {
   createRateCard: (b: any) => request<any>('/rate-cards', { method: 'POST', body: JSON.stringify(b) }),
   updateRateCard: (id: string, b: any) => request<any>(`/rate-cards/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteRateCard: (id: string) => request<any>(`/rate-cards/${id}`, { method: 'DELETE' }),
+  // ── legal documents (versioned; terms / privacy / requirements) ──
+  legalList: () => request<{ type: string; version: number; sections: any[]; publishedBy: string | null; publishedAt: string | null }[]>('/legal'),
+  legalVersions: (type: string) => request<{ type: string; version: number; sections: any[]; current: boolean; publishedBy: string | null; publishedAt: string }[]>(`/legal/${type}/versions`),
+  legalPublish: (type: string, sections: any[]) => request<any>(`/legal/${type}`, { method: 'POST', body: JSON.stringify({ sections }) }),
   driverGroups: () => request<any[]>('/driver-groups'),
   createGroup: (b: { name: string; color?: string; driverIds?: string[] }) =>
     request<any>('/driver-groups', { method: 'POST', body: JSON.stringify(b) }),

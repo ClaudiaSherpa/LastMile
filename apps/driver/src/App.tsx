@@ -98,92 +98,12 @@ function Welcome({ onStart, onSignIn }: { onStart: () => void; onSignIn: () => v
 }
 
 // ── requirements + terms of service (must accept to apply) ──────
-export const TERMS_VERSION = '2026-08-01';
-
-const REQUIREMENTS = [
-  { es: 'Ser mayor de 18 años', en: 'Be 18 or older',
-    dEs: 'Debes tener al menos 18 años cumplidos para conducir con PasarEx.', dEn: 'You must be at least 18 years old to drive with PasarEx.' },
-  { es: 'Licencia de conducción vigente', en: 'Valid driver’s licence',
-    dEs: 'Licencia de conducción de Barbados vigente para la categoría de tu vehículo.', dEn: 'A current Barbados driver’s licence for your vehicle category.' },
-  { es: 'Vehículo elegible con documentos al día', en: 'Eligible vehicle with current documents',
-    dEs: 'Moto, carro, van o camioneta propios, con seguro obligatorio y registro vigentes.', dEn: 'Your own motorcycle, car, van or pickup, with valid compulsory insurance and registration.' },
-  { es: 'Smartphone compatible', en: 'Compatible smartphone',
-    dEs: 'iPhone o Android con plan de datos y GPS para recibir y rastrear entregas.', dEn: 'iPhone or Android with a data plan and GPS to receive and track deliveries.' },
-  { es: 'Documento de identidad', en: 'Government-issued ID',
-    dEs: 'Documento nacional de identidad de Barbados vigente para verificar tu identidad.', dEn: 'A valid Barbados national ID to verify your identity.' },
-  { es: 'Verificación de antecedentes', en: 'Background check',
-    dEs: 'Autorizas y debes aprobar la revisión de seguridad y antecedentes.', dEn: 'You authorize and must pass a security & background check.' },
-  { es: 'Cuenta bancaria a tu nombre', en: 'Bank account in your name',
-    dEs: 'Para recibir tus pagos por depósito directo.', dEn: 'To receive your earnings via direct deposit.' },
-];
-
-const TERMS = [
-  { es: '1. Aceptación y elegibilidad', en: '1. Acceptance & eligibility',
-    bEs: 'Al marcar la casilla de aceptación declaras que cumples todos los requisitos indicados y aceptas estos Términos de Servicio como condición para postularte y operar en la plataforma PasarEx LM.',
-    bEn: 'By checking the acceptance box you represent that you meet all the requirements listed above and agree to these Terms of Service as a condition to apply for and operate on the PasarEx LM platform.' },
-  { es: '2. Contratista independiente', en: '2. Independent contractor',
-    bEs: 'Operas como contratista independiente. Estos Términos no crean una relación laboral, de agencia ni de sociedad. Eres responsable de tus impuestos y obligaciones de seguridad social.',
-    bEn: 'You operate as an independent contractor. These Terms create no employment, agency or partnership relationship. You are responsible for your own taxes and social-security obligations.' },
-  { es: '3. Verificación de antecedentes y seguridad', en: '3. Background & security verification',
-    bEs: 'Autorizas a PasarEx LM y a sus aliados a verificar tu identidad, antecedentes y documentos. Aprobar la etapa de seguridad es obligatorio antes de recibir entregas.',
-    bEn: 'You authorize PasarEx LM and its partners to verify your identity, background and documents. Passing the security stage is mandatory before you can receive deliveries.' },
-  { es: '4. Veracidad de la información', en: '4. Accuracy of information',
-    bEs: 'Garantizas que toda la información y los documentos que cargas son verídicos, propios y están vigentes. La información falsa o los documentos vencidos pueden suspender tu elegibilidad.',
-    bEn: 'You warrant that all information and documents you upload are true, your own and current. False information or expired documents may suspend your eligibility.' },
-  { es: '5. Vehículo, licencia y seguros', en: '5. Vehicle, license & insurance',
-    bEs: 'Debes mantener tu licencia, seguro obligatorio y registro del vehículo vigentes, y conducir un vehículo en buen estado y debidamente asegurado conforme a la ley de Barbados.',
-    bEn: "You must keep your driver's licence, compulsory insurance and vehicle registration current, and operate a roadworthy vehicle properly insured under the laws of Barbados." },
-  { es: '6. Normas de conducta y servicio', en: '6. Conduct & service standards',
-    bEs: 'Te comprometes a prestar un servicio seguro, puntual y respetuoso, a cumplir las normas de tránsito y a proteger la mercancía y los datos del destinatario.',
-    bEn: 'You agree to provide safe, punctual and respectful service, to obey traffic laws, and to protect each shipment and the consignee’s data.' },
-  { es: '7. Pagos', en: '7. Payments',
-    bEs: 'Los pagos se liquidan por los fletes completados y se depositan en la cuenta bancaria a tu nombre. Las tarifas y condiciones pueden actualizarse y se notificarán en la app.',
-    bEn: 'Payments are settled for completed freight and deposited to the bank account in your name. Rates and conditions may be updated and will be notified in the app.' },
-  { es: '8. Calificaciones y desactivación', en: '8. Ratings & deactivation',
-    bEs: 'Tu DriverScore se calcula con calificaciones y desempeño y afecta tu prioridad de asignación. PasarEx LM puede suspender o desactivar tu cuenta por incumplimiento de estos Términos.',
-    bEn: 'Your DriverScore is computed from ratings and performance and affects your assignment priority. PasarEx LM may suspend or deactivate your account for breach of these Terms.' },
-  { es: '9. Protección de datos', en: '9. Data protection',
-    bEs: 'Autorizas el tratamiento de tus datos personales conforme a la Data Protection Act, 2019 de Barbados para operar el servicio, verificar tu elegibilidad y procesar pagos. Puedes acceder, actualizar y suprimir tus datos.',
-    bEn: 'You authorize the processing of your personal data under the Barbados Data Protection Act, 2019 to operate the service, verify your eligibility and process payments. You may access, update and delete your data.' },
-  { es: '10. Modificaciones y ley aplicable', en: '10. Modifications & governing law',
-    bEs: 'PasarEx LM puede modificar estos Términos; el uso continuo implica aceptación. Estos Términos se rigen por las leyes de Barbados.',
-    bEn: 'PasarEx LM may modify these Terms; continued use constitutes acceptance. These Terms are governed by the laws of Barbados.' },
-];
-
-export const PRIVACY_VERSION = '2026-09-24';
-
-const PRIVACY = [
-  { es: '1. Quiénes somos', en: '1. Who we are',
-    bEs: 'PasarEx LM opera una plataforma de última milla en Barbados. Somos responsables del tratamiento de tus datos personales conforme a la Data Protection Act, 2019 de Barbados.',
-    bEn: 'PasarEx LM operates a last-mile delivery platform in Barbados. We are the controller of your personal data under the Barbados Data Protection Act, 2019.' },
-  { es: '2. Datos que recopilamos', en: '2. Data we collect',
-    bEs: 'Datos de identidad y contacto (nombre, documento nacional, celular, correo, dirección), datos del vehículo, documentos y fotos que cargas (licencia, seguro, registro, identidad, factura de servicios, fotos del odómetro), ubicación GPS mientras estás en ruta, e información operativa (entregas, paquetes, millaje, calificaciones).',
-    bEn: 'Identity and contact details (name, national ID, mobile, email, address), vehicle details, the documents and photos you upload (licence, insurance, registration, ID, utility bill, odometer photos), GPS location while you are on a route, and operational data (deliveries, packages, mileage, ratings).' },
-  { es: '3. Cómo usamos tus datos', en: '3. How we use your data',
-    bEs: 'Para verificar tu elegibilidad y antecedentes, asignarte fletes, coordinar y rastrear entregas, calcular tu pago y DriverScore, comunicarnos contigo (incluido WhatsApp) y cumplir obligaciones legales.',
-    bEn: 'To verify your eligibility and background, assign you freight, coordinate and track deliveries, calculate your pay and DriverScore, communicate with you (including via WhatsApp), and meet legal obligations.' },
-  { es: '4. Ubicación', en: '4. Location',
-    bEs: 'Tu ubicación se comparte con Operaciones únicamente mientras tienes una ruta activa, para seguimiento de la entrega. Puedes desactivar el permiso de ubicación en tu dispositivo, pero esto puede impedir recibir o completar rutas.',
-    bEn: 'Your location is shared with Ops only while you have an active route, for delivery tracking. You can turn off location permission on your device, but this may prevent you from receiving or completing routes.' },
-  { es: '5. Con quién compartimos', en: '5. Who we share with',
-    bEs: 'Con nuestro personal de Operaciones y seguridad, con proveedores que nos prestan servicios (mensajería WhatsApp, procesamiento OCR, alojamiento) bajo obligaciones de confidencialidad, y con autoridades cuando la ley lo exige. No vendemos tus datos.',
-    bEn: 'With our Ops and security staff, with service providers who support us (WhatsApp messaging, OCR processing, hosting) under confidentiality obligations, and with authorities where required by law. We do not sell your data.' },
-  { es: '6. Conservación', en: '6. Retention',
-    bEs: 'Conservamos tus datos mientras tu cuenta esté activa y durante el periodo necesario para cumplir obligaciones legales, contables y de resolución de disputas; luego los eliminamos o anonimizamos.',
-    bEn: 'We keep your data while your account is active and for as long as needed to meet legal, accounting and dispute-resolution obligations; after that we delete or anonymize it.' },
-  { es: '7. Tus derechos', en: '7. Your rights',
-    bEs: 'Bajo la Data Protection Act, 2019 puedes acceder, corregir, actualizar o solicitar la eliminación de tus datos, y oponerte a ciertos tratamientos. Puedes editar tu perfil en la app o contactarnos.',
-    bEn: 'Under the Data Protection Act, 2019 you may access, correct, update or request deletion of your data, and object to certain processing. You can edit your profile in the app or contact us.' },
-  { es: '8. Seguridad', en: '8. Security',
-    bEs: 'Protegemos tus datos con controles de acceso por rol, cifrado en tránsito (HTTPS) y almacenamiento restringido. Ningún sistema es 100% seguro, pero trabajamos para protegerlos.',
-    bEn: 'We protect your data with role-based access controls, encryption in transit (HTTPS) and restricted storage. No system is 100% secure, but we work to safeguard it.' },
-  { es: '9. Cambios y contacto', en: '9. Changes & contact',
-    bEs: 'Podemos actualizar esta política; publicaremos la nueva versión en la app. Para ejercer tus derechos o resolver dudas de privacidad, contáctanos por los canales de soporte de PasarEx.',
-    bEn: 'We may update this policy; the new version will be posted in the app. To exercise your rights or raise privacy questions, contact us through PasarEx support channels.' },
-];
+// Content is now fetched from the versioned legal API (api.legal). See admin "Legal" tab.
 
 function Privacy({ onBack }: { onBack: () => void }) {
   const { t, lang } = useI18n();
+  const [doc, setDoc] = useState<any>(null);
+  useEffect(() => { api.legal('privacy').then(setDoc).catch(() => {}); }, []);
   return (
     <Phone>
       <div style={{ paddingTop: 54 }}>
@@ -198,29 +118,38 @@ function Privacy({ onBack }: { onBack: () => void }) {
         <p style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.5, marginTop: 0 }}>
           {t('Cómo PasarEx LM recopila, usa y protege tus datos personales.', 'How PasarEx LM collects, uses and protects your personal data.')}
         </p>
-        {PRIVACY.map((s, i) => (
+        {!doc && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+        {(doc?.sections ?? []).map((s: any, i: number) => (
           <div key={i} style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{lang === 'es' ? s.es : s.en}</div>
-            <div style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.5 }}>{lang === 'es' ? s.bEs : s.bEn}</div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{lang === 'es' ? s.titleEs : s.titleEn}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.5 }}>{lang === 'es' ? s.bodyEs : s.bodyEn}</div>
           </div>
         ))}
-        <p className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)' }}>{t('Versión', 'Version')} {PRIVACY_VERSION}</p>
+        {doc && <p className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)' }}>{t('Versión', 'Version')} {doc.version}</p>}
       </div>
     </Phone>
   );
 }
 
-function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | void; onBack: () => void }) {
+function Requirements({ onAccept, onBack }: { onAccept: (meta: { termsVersion: number; privacyVersion: number }) => Promise<void> | void; onBack: () => void }) {
   const { t, lang } = useI18n();
   const [accepted, setAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reqDoc, setReqDoc] = useState<any>(null);
+  const [termsDoc, setTermsDoc] = useState<any>(null);
+  const [privacyDoc, setPrivacyDoc] = useState<any>(null);
+  useEffect(() => {
+    api.legal('requirements').then(setReqDoc).catch(() => {});
+    api.legal('terms').then(setTermsDoc).catch(() => {});
+    api.legal('privacy').then(setPrivacyDoc).catch(() => {});
+  }, []);
 
   const apply = async () => {
     if (!accepted || !privacyAccepted || busy) return;
     setBusy(true);
-    try { await onAccept(); } finally { setBusy(false); }
+    try { await onAccept({ termsVersion: termsDoc?.version ?? 0, privacyVersion: privacyDoc?.version ?? 0 }); } finally { setBusy(false); }
   };
 
   if (showPrivacy) return <Privacy onBack={() => setShowPrivacy(false)} />;
@@ -245,12 +174,12 @@ function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | vo
       <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 18px' }}>
         {/* requirements checklist */}
         <div style={{ display: 'grid', gap: 13, marginBottom: 22 }}>
-          {REQUIREMENTS.map((r, i) => (
+          {(reqDoc?.sections ?? []).map((r: any, i: number) => (
             <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: 'var(--brand-tint)', color: 'var(--brand-ink)', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 14 }}>✓</div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 14.5 }}>{lang === 'es' ? r.es : r.en}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--ink-500)', lineHeight: 1.45, marginTop: 1 }}>{lang === 'es' ? r.dEs : r.dEn}</div>
+                <div style={{ fontWeight: 600, fontSize: 14.5 }}>{lang === 'es' ? r.titleEs : r.titleEn}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-500)', lineHeight: 1.45, marginTop: 1 }}>{lang === 'es' ? r.bodyEs : r.bodyEn}</div>
               </div>
             </div>
           ))}
@@ -259,13 +188,14 @@ function Requirements({ onAccept, onBack }: { onAccept: () => Promise<void> | vo
         {/* terms of service */}
         <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Términos de servicio', 'Terms of service')}</div>
         <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 14, background: 'var(--surface-2)', maxHeight: 240, overflowY: 'auto' }}>
-          {TERMS.map((s, i) => (
-            <div key={i} style={{ marginBottom: i === TERMS.length - 1 ? 0 : 12 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{lang === 'es' ? s.es : s.en}</div>
-              <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-600)', lineHeight: 1.5 }}>{lang === 'es' ? s.bEs : s.bEn}</p>
+          {!termsDoc && <div style={{ color: 'var(--ink-500)', fontSize: 12.5 }}>…</div>}
+          {(termsDoc?.sections ?? []).map((s: any, i: number) => (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{lang === 'es' ? s.titleEs : s.titleEn}</div>
+              <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--ink-600)', lineHeight: 1.5 }}>{lang === 'es' ? s.bodyEs : s.bodyEn}</p>
             </div>
           ))}
-          <p className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 12, marginBottom: 0 }}>{t('Versión', 'Version')} {TERMS_VERSION}</p>
+          {termsDoc && <p className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 12, marginBottom: 0 }}>{t('Versión', 'Version')} {termsDoc.version}</p>}
         </div>
       </div>
 
@@ -1197,14 +1127,14 @@ export function App() {
   }, []);
 
   // called only after the applicant accepts the requirements + terms of service
-  const start = async () => {
+  const start = async (meta: { termsVersion: number; privacyVersion: number }) => {
     const r = await api.create();
     const s = { id: r.id, token: r.resumeToken };
     session.set(s);
     setRef(s);
     // record the acceptance on the application (auditable, retained on submit)
     const now = new Date().toISOString();
-    const acceptance = { termsAcceptedAt: now, termsVersion: TERMS_VERSION, privacyAcceptedAt: now, privacyVersion: PRIVACY_VERSION };
+    const acceptance = { termsAcceptedAt: now, termsVersion: meta.termsVersion, privacyAcceptedAt: now, privacyVersion: meta.privacyVersion };
     setDraft(acceptance);
     try { await api.patch(r.id, r.resumeToken, acceptance); } catch { /* offline tolerated */ }
     setView('wizard');
