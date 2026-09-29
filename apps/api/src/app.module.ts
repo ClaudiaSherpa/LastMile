@@ -20,6 +20,7 @@ import { MessagingModule } from './messaging/messaging.module';
 import { UsersModule } from './users/users.module';
 import { RateCardModule } from './rate-cards/rate-card.module';
 import { LegalModule } from './legal/legal.module';
+import { MapLayerModule } from './map/map-layer.module';
 import { DriverModule } from './driver/driver.module';
 import { JwtAuthGuard, RolesGuard } from './auth/guards';
 import { AppController } from './app.controller';
@@ -47,6 +48,7 @@ import { AppController } from './app.controller';
     UsersModule,
     RateCardModule,
     LegalModule,
+    MapLayerModule,
   ],
   controllers: [AppController],
   providers: [

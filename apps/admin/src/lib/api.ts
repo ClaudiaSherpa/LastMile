@@ -173,6 +173,11 @@ export const api = {
   createRateCard: (b: any) => request<any>('/rate-cards', { method: 'POST', body: JSON.stringify(b) }),
   updateRateCard: (id: string, b: any) => request<any>(`/rate-cards/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteRateCard: (id: string) => request<any>(`/rate-cards/${id}`, { method: 'DELETE' }),
+  // ── map layers (admin-managed overlays imported from KML/KMZ) ──
+  mapLayers: () => request<{ id: string; slug: string; name: string; color: string; visible: boolean; featureCount: number; features: any[]; createdBy: string | null; createdAt: string }[]>('/map-layers'),
+  createMapLayer: (b: { name?: string; color?: string; features: any[]; visible?: boolean }) => request<any>('/map-layers', { method: 'POST', body: JSON.stringify(b) }),
+  updateMapLayer: (id: string, b: { name?: string; color?: string; visible?: boolean }) => request<any>(`/map-layers/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  deleteMapLayer: (id: string) => request<any>(`/map-layers/${id}`, { method: 'DELETE' }),
   // ── legal documents (versioned; terms / privacy / requirements) ──
   legalList: () => request<{ type: string; version: number; sections: any[]; publishedBy: string | null; publishedAt: string | null }[]>('/legal'),
   legalVersions: (type: string) => request<{ type: string; version: number; sections: any[]; current: boolean; publishedBy: string | null; publishedAt: string }[]>(`/legal/${type}/versions`),

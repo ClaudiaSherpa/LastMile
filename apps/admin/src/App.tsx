@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import * as XLSX from 'xlsx';
 import { api, auth } from './lib/api';
 import { I18nCtx, Lang, useI18n } from './lib/i18n';
 import { useEvent, useRoom } from './lib/socket';
+import { parseKmlOrKmz } from './lib/kml';
 import { Config } from './Config';
 
 // ── shared bits ─────────────────────────────────────────────────
@@ -2092,12 +2093,89 @@ function DayPlanTable() {
   );
 }
 
+// An admin-imported overlay (Sub-Zones, etc.). Rings/lines are projected with
+// the same box as the driver dots (toXY -> 0..100) so everything aligns.
+function DynamicLayer({ layer }: { layer: any }) {
+  const pathOf = (pts: number[][], close: boolean) =>
+    pts.map((p, i) => { const { x, y } = toXY(p[0], p[1]); return `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`; }).join(' ') + (close ? ' Z' : '');
+  const centroid = (ring: number[][]) => {
+    let sx = 0, sy = 0; for (const p of ring) { const { x, y } = toXY(p[0], p[1]); sx += x; sy += y; }
+    return { x: sx / ring.length, y: sy / ring.length };
+  };
+  return (
+    <>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden>
+        {layer.features.map((f: any, fi: number) => {
+          const c = f.color || layer.color || '#2563eb';
+          return (
+            <g key={fi}>
+              {(f.rings || []).map((ring: number[][], ri: number) => (
+                <path key={`r${ri}`} d={pathOf(ring, true)} fill={c} fillOpacity={0.16} stroke={c}
+                  strokeWidth={1.1} strokeOpacity={0.9} vectorEffect="non-scaling-stroke" fillRule="evenodd" />
+              ))}
+              {(f.lines || []).map((line: number[][], li: number) => (
+                <path key={`l${li}`} d={pathOf(line, false)} fill="none" stroke={c} strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+      {layer.features.map((f: any, fi: number) => {
+        const label = f.props?.code?.replace(/^BGI-/, '') || f.name?.split('|')[0]?.trim();
+        const ring = f.rings?.[0];
+        if (!label || !ring) return null;
+        const { x, y } = centroid(ring);
+        return (
+          <div key={`t${fi}`} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%,-50%)',
+            pointerEvents: 'none', fontSize: 8.5, fontWeight: 700, color: f.color || layer.color,
+            textShadow: '0 0 3px #fff,0 0 3px #fff,0 0 2px #fff', whiteSpace: 'nowrap' }}>{label}</div>
+        );
+      })}
+    </>
+  );
+}
+
 function LiveMap({ role }: { role?: string }) {
   const { t } = useI18n();
+  const canEdit = role === 'admin';
   const [drivers, setDrivers] = useState<Record<string, any>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [layers, setLayers] = useState<{ roads: boolean; parishes: boolean }>({ roads: true, parishes: false });
+  const [dynLayers, setDynLayers] = useState<any[]>([]);
+  const [dynOn, setDynOn] = useState<Record<string, boolean>>({});
+  const [pending, setPending] = useState<null | { name: string; color: string; features: any[]; count: number }>(null);
+  const [importing, setImporting] = useState(false);
+  const [layerErr, setLayerErr] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
   const { connected } = useRoom('ops');
+
+  const loadLayers = useCallback(() => {
+    api.mapLayers().then((list) => {
+      setDynLayers(list);
+      setDynOn((prev) => { const next = { ...prev }; for (const l of list) if (!(l.id in next)) next[l.id] = l.visible; return next; });
+    }).catch(() => {});
+  }, []);
+  useEffect(() => { loadLayers(); }, [loadLayers]);
+
+  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    setLayerErr('');
+    try { const parsed = await parseKmlOrKmz(file); setPending({ name: parsed.name, color: '#2563eb', features: parsed.features, count: parsed.features.length }); }
+    catch (er: any) { setLayerErr(er?.message || t('No se pudo leer el archivo', 'Could not read the file')); }
+  };
+  const doImport = async () => {
+    if (!pending) return;
+    setImporting(true); setLayerErr('');
+    try { const created = await api.createMapLayer({ name: pending.name, color: pending.color, features: pending.features, visible: true }); setDynOn((p) => ({ ...p, [created.id]: true })); setPending(null); loadLayers(); }
+    catch (er: any) { setLayerErr(er?.message || 'Error'); } finally { setImporting(false); }
+  };
+  const delLayer = async (l: any) => {
+    if (!window.confirm(t(`¿Eliminar la capa "${l.name}"?`, `Delete layer "${l.name}"?`))) return;
+    try { await api.deleteMapLayer(l.id); loadLayers(); } catch (er: any) { setLayerErr(er?.message || 'Error'); }
+  };
 
   useEffect(() => {
     api.live().then((list) => {
@@ -2128,8 +2206,9 @@ function LiveMap({ role }: { role?: string }) {
         <div className="card" style={{ position: 'relative', width: 'min(100%, 460px)', aspectRatio: MAP_ASPECT, overflow: 'hidden', background: 'var(--surface-2, #eef3f5)' }}>
           {layers.roads && <RoadsLayer />}
           {layers.parishes && <ParishesLayer />}
+          {dynLayers.filter((l) => dynOn[l.id]).map((l) => <DynamicLayer key={l.id} layer={l} />)}
           {/* layer control */}
-          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, background: 'var(--surface)', borderRadius: 9, boxShadow: 'var(--shadow)', padding: '7px 10px', display: 'grid', gap: 4 }}>
+          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, background: 'var(--surface)', borderRadius: 9, boxShadow: 'var(--shadow)', padding: '7px 10px', display: 'grid', gap: 4, maxHeight: '82%', overflowY: 'auto', maxWidth: 190 }}>
             <div className="eyebrow" style={{ fontSize: 9.5 }}>{t('Capas', 'Layers')}</div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
               <input type="checkbox" checked={layers.roads} onChange={(e) => setLayers((l) => ({ ...l, roads: e.target.checked }))} /> {t('Carreteras', 'Roads')}
@@ -2137,7 +2216,47 @@ function LiveMap({ role }: { role?: string }) {
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
               <input type="checkbox" checked={layers.parishes} onChange={(e) => setLayers((l) => ({ ...l, parishes: e.target.checked }))} /> {t('Parroquias', 'Parishes')}
             </label>
+            {dynLayers.map((l) => (
+              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                  <input type="checkbox" checked={!!dynOn[l.id]} onChange={(e) => setDynOn((p) => ({ ...p, [l.id]: e.target.checked }))} />
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: l.color, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${l.name} · ${l.featureCount}`}>{l.name}</span>
+                </label>
+                {canEdit && <button onClick={() => delLayer(l)} title={t('Eliminar capa', 'Delete layer')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-400)', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>}
+              </div>
+            ))}
+            {canEdit && (
+              <>
+                <input ref={fileRef} type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" onChange={onPickFile} style={{ display: 'none' }} />
+                <button className="btn btn-ghost" style={{ padding: '3px 6px', fontSize: 10.5, marginTop: 2 }} onClick={() => fileRef.current?.click()}>+ {t('Importar KML/KMZ', 'Import KML/KMZ')}</button>
+              </>
+            )}
+            {layerErr && <div style={{ fontSize: 10, color: 'var(--red-ink, #d9342b)', maxWidth: 168 }}>{layerErr}</div>}
           </div>
+          {/* import confirm card */}
+          {pending && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 8, background: 'rgba(0,0,0,.28)', display: 'grid', placeItems: 'center', padding: 12 }}>
+              <div className="card" style={{ padding: 16, width: 280, maxWidth: '100%', background: 'var(--surface)' }}>
+                <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Importar capa', 'Import layer')}</div>
+                <label className="field-label">{t('Nombre', 'Name')}</label>
+                <input className="input" value={pending.name} onChange={(e) => setPending((p) => p && ({ ...p, name: e.target.value }))} style={{ marginBottom: 10 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <label className="field-label">{t('Color', 'Color')}</label>
+                    <input type="color" value={pending.color} onChange={(e) => setPending((p) => p && ({ ...p, color: e.target.value }))} style={{ width: 42, height: 30, padding: 0, border: '1px solid var(--line)', borderRadius: 6, background: 'none' }} />
+                  </div>
+                  <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', marginTop: 14 }}>{pending.count} {t('formas', 'shapes')}</div>
+                </div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--ink-400)', marginBottom: 10 }}>{t('Los colores propios del archivo se conservan por forma.', "Each shape keeps its own colour from the file.")}</div>
+                {layerErr && <div className="badge badge-red" style={{ marginBottom: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{layerErr}</div>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setPending(null); setLayerErr(''); }}>{t('Cancelar', 'Cancel')}</button>
+                  <button className="btn btn-primary" style={{ flex: 1 }} disabled={importing || !pending.name.trim()} onClick={doImport}>{importing ? '…' : t('Importar', 'Import')}</button>
+                </div>
+              </div>
+            </div>
+          )}
           {list.map((d: any) => {
             const { x, y } = toXY(d.lng, d.lat);
             const on = selected === d.id;
