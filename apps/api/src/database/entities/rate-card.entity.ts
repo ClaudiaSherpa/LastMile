@@ -55,7 +55,8 @@ export class RateCard {
   @Column({ type: 'double precision', default: 0 })
   lowVolumeRatePerPackage: number;
 
-  // bonus: a flat amount added when packages delivered reach bonusThreshold (0 disables)
+  // volume bonus: once packages delivered reach bonusThreshold, bonusAmount is
+  // paid per package on ALL packages delivered (0 threshold disables)
   @Column({ type: 'int', default: 0 })
   bonusThreshold: number;
 

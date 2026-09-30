@@ -144,7 +144,7 @@ const RC_NUM: [string, string, string][] = [
   ['lowVolumeThreshold', 'Umbral bajo volumen (paq)', 'Low-volume threshold (pkgs)'],
   ['lowVolumeRatePerPackage', 'Tarifa fija/paq bajo vol. ($)', 'Flat rate/pkg low-vol ($)'],
   ['bonusThreshold', 'Umbral de bono (paq)', 'Bonus threshold (pkgs)'],
-  ['bonusAmount', 'Monto del bono ($)', 'Bonus amount ($)'],
+  ['bonusAmount', 'Bono por paquete ($)', 'Bonus per package ($)'],
   ['avgWeightKg', 'Peso prom./paquete (kg)', 'Avg weight/package (kg)'],
   ['avgDistanceKm', 'Distancia prom. (km)', 'Avg distance (km)'],
 ];
@@ -181,7 +181,7 @@ function RateCards({ role }: { role?: string }) {
   // live estimate preview for a sample tender
   const [sample, setSample] = useState(80);
   const est = (c: any) => {
-    const bonus = c.bonusThreshold > 0 && sample >= c.bonusThreshold ? c.bonusAmount : 0;
+    const bonus = c.bonusThreshold > 0 && sample >= c.bonusThreshold ? sample * c.bonusAmount : 0;
     if (c.lowVolumeThreshold > 0 && sample < c.lowVolumeThreshold) {
       const pkg = sample * c.lowVolumeRatePerPackage;
       return { lowVol: true, met: false, fixed: 0, pkg, wt: 0, km: 0, bonus, total: Math.round((pkg + bonus) * 100) / 100 };
@@ -226,7 +226,7 @@ function RateCards({ role }: { role?: string }) {
                 <span>· {money(c.ratePerKg, c)}/kg</span>
                 <span>· {money(c.ratePerKm, c)}/km</span>
                 {c.lowVolumeThreshold > 0 && <span style={{ color: 'var(--brand-ink)' }}>· {t('bajo vol.', 'low-vol')} &lt;{c.lowVolumeThreshold} {t('paq', 'pkg')}: {money(c.lowVolumeRatePerPackage, c)}/{t('paq', 'pkg')} {t('plano', 'flat')}</span>}
-                {c.bonusThreshold > 0 && <span style={{ color: 'var(--brand-ink)' }}>· {t('bono', 'bonus')} ≥{c.bonusThreshold} {t('paq', 'pkg')}: +{money(c.bonusAmount, c)}</span>}
+                {c.bonusThreshold > 0 && <span style={{ color: 'var(--brand-ink)' }}>· {t('bono', 'bonus')} ≥{c.bonusThreshold} {t('paq', 'pkg')}: +{money(c.bonusAmount, c)}/{t('paq', 'pkg')} ({t('todos', 'all')})</span>}
                 <span className="mono" style={{ color: 'var(--ink-400)' }}>· ~{c.avgWeightKg}kg/{t('paq', 'pkg')}, {c.avgDistanceKm}km</span>
               </div>
               <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 9, fontSize: 12.5 }}>

@@ -100,7 +100,9 @@ export class RateCardService {
       rateCard: { id: card.id, name: card.name },
     };
 
-    const bonus = card.bonusThreshold > 0 && packages >= card.bonusThreshold ? round(card.bonusAmount) : 0;
+    // volume bonus: once packages reach the threshold, bonusAmount is paid per
+    // package on ALL packages delivered (e.g. threshold 70, delivers 80 -> 80 × bonus)
+    const bonus = card.bonusThreshold > 0 && packages >= card.bonusThreshold ? round(packages * card.bonusAmount) : 0;
 
     // low-volume routes: flat fixed rate per package (no day rate / kg / km)
     if (card.lowVolumeThreshold > 0 && packages < card.lowVolumeThreshold) {
