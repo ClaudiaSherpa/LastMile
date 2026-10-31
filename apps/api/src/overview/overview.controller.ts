@@ -17,6 +17,11 @@ import {
   OperatingArea,
 } from '../database/entities';
 
+const emptyExportTotals = () => ({
+  daySheets: 0, drivers: 0, packagesPicked: 0, packagesDelivered: 0,
+  packagesReturned: 0, successRate: null as number | null, mileage: 0, onTimeRate: null as number | null,
+});
+
 /**
  * Read-only Ops surface for Phase 1: overview KPIs, driver directory and the
  * applications queue. Every route is role-gated server-side.
@@ -280,6 +285,93 @@ export class OverviewController {
       },
       drivers,
     };
+  }
+
+  /**
+   * Raw day-sheet rows (one per driver-day) for the Excel export, filtered by a
+   * date range and optionally by a single driver and/or a driver group. The
+   * workbook itself is built client-side (admin app). Admin + dispatcher only.
+   */
+  @Get('day-sheets/export')
+  @Roles(Role.ADMIN, Role.DISPATCHER)
+  async daySheetExport(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('driverId') driverId?: string,
+    @Query('groupId') groupId?: string,
+  ) {
+    const today = new Date().toISOString().slice(0, 10);
+    const fromStr = from || today;
+    const toStr = to || today;
+
+    let memberIds: string[] | null = null;
+    if (groupId) {
+      memberIds = await this.groups.memberIds(groupId);
+      if (!memberIds.length) return { from: fromStr, to: toStr, count: 0, totals: emptyExportTotals(), rows: [] };
+    }
+
+    const where: any = { operationalDate: Between(fromStr, toStr) };
+    if (driverId) where.driverId = driverId;
+    else if (memberIds) where.driverId = In(memberIds);
+
+    const rows = await this.driverDays.find({
+      where,
+      relations: { driver: { user: true, vehicles: true } },
+      order: { operationalDate: 'ASC' },
+    });
+
+    // driverId -> group names
+    const groupList = await this.groups.list();
+    const groupsByDriver = new Map<string, string[]>();
+    for (const g of groupList as any[]) for (const id of g.driverIds ?? []) {
+      const arr = groupsByDriver.get(id) ?? []; arr.push(g.name); groupsByDriver.set(id, arr);
+    }
+
+    const hhmm = (d?: Date | null) => (d ? new Date(d).toLocaleTimeString('en-GB', { timeZone: 'America/Barbados', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+    const statusOf = (r: DriverDay) => r.depotReturnAt ? 'completed' : r.depotDepartureAt ? 'departed' : r.depotArrivalAt ? 'checked_in' : 'not_started';
+    const mileageOf = (r: DriverDay) => (r.startMileage != null && r.endMileage != null ? Math.round((r.endMileage - r.startMileage) * 10) / 10 : null);
+    const deltaOf = (r: DriverDay) => (r.plannedArrivalAt && r.depotArrivalAt ? Math.round((new Date(r.depotArrivalAt).getTime() - new Date(r.plannedArrivalAt).getTime()) / 60000) : null);
+
+    const out = rows.map((r) => ({
+      date: r.operationalDate,
+      driver: r.driver?.user?.fullName ?? '—',
+      phone: r.driver?.user?.phone ?? '',
+      vehicle: r.driver?.vehicles?.[0]?.type ?? '',
+      plate: r.driver?.vehicles?.[0]?.plate ?? '',
+      tier: r.driver?.tier ?? '',
+      groups: (groupsByDriver.get(r.driverId) ?? []).join(', '),
+      status: statusOf(r),
+      plannedArrival: hhmm(r.plannedArrivalAt),
+      hubArrival: hhmm(r.depotArrivalAt),
+      arrivalDeltaMin: deltaOf(r),
+      departure: hhmm(r.depotDepartureAt),
+      returned: hhmm(r.depotReturnAt),
+      packagesPicked: r.packagesPicked ?? null,
+      delivered: r.successfulDeliveries ?? null,
+      packagesReturned: r.packagesReturned ?? null,
+      successRate: r.packagesPicked ? Math.round(((r.successfulDeliveries ?? 0) / r.packagesPicked) * 100) : null,
+      startMileage: r.startMileage ?? null,
+      endMileage: r.endMileage ?? null,
+      mileage: mileageOf(r),
+    }));
+
+    const sum = (f: 'packagesPicked' | 'delivered' | 'packagesReturned') => out.reduce((a, r) => a + (r[f] ?? 0), 0);
+    const mileageTotal = Math.round(out.reduce((a, r) => a + (r.mileage ?? 0), 0) * 10) / 10;
+    const withPlanned = out.filter((r) => r.arrivalDeltaMin != null);
+    const onTime = withPlanned.filter((r) => (r.arrivalDeltaMin ?? 0) <= 0).length;
+    const picked = sum('packagesPicked');
+    const totals = {
+      daySheets: out.length,
+      drivers: new Set(rows.map((r) => r.driverId)).size,
+      packagesPicked: picked,
+      packagesDelivered: sum('delivered'),
+      packagesReturned: sum('packagesReturned'),
+      successRate: picked ? Math.round((sum('delivered') / picked) * 100) : null,
+      mileage: mileageTotal,
+      onTimeRate: withPlanned.length ? Math.round((onTime / withPlanned.length) * 100) : null,
+    };
+
+    return { from: fromStr, to: toStr, count: out.length, totals, rows: out };
   }
 
   @Get('applications')

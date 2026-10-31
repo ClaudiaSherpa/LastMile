@@ -954,9 +954,75 @@ function DriverDocuments({ onBack }: { onBack: () => void }) {
 // delivery states that count as "on a route" (started, not yet completed)
 const ROUTE_ACTIVE_STATUSES = ['en_route_pickup', 'picked_up', 'en_route'];
 
+// A mass tender ("open call") card: report to the hub, pick a loading window.
+function MassCallCard({ m, onChanged, flash }: { m: any; onChanged: () => void; flash: (s: string) => void }) {
+  const { t } = useI18n();
+  const [sel, setSel] = useState<string>(m.mySlot || '');
+  const [busy, setBusy] = useState(false);
+  const full = m.accepted >= m.driversNeeded;
+
+  const accept = async () => {
+    if (!sel) return;
+    setBusy(true);
+    try { await api.acceptMassTender(m.id, sel); flash(`${t('Franja reservada', 'Window booked')} · ${sel}`); onChanged(); }
+    catch (e: any) { flash(e.message); onChanged(); } finally { setBusy(false); }
+  };
+  const withdraw = async () => {
+    setBusy(true);
+    try { await api.withdrawMassTender(m.id); flash(t('Reserva cancelada', 'Booking cancelled')); onChanged(); }
+    catch (e: any) { flash(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <strong style={{ fontSize: 15 }}>{m.name || t('Llamado al hub', 'Report to hub')}</strong>
+        <span className="badge badge-brand">{m.windowStart}–{m.windowEnd}</span>
+      </div>
+      <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '3px 0 8px' }}>
+        {m.operationalDate} · {m.hubName} · {m.accepted}/{m.driversNeeded} {t('conductores', 'drivers')}
+      </div>
+
+      {m.mySlot && (
+        <div style={{ background: 'var(--brand-tint)', color: 'var(--brand-ink)', borderRadius: 9, padding: '8px 10px', fontSize: 12.5, marginBottom: 10 }}>
+          <b>{t('Tu franja de carga', 'Your loading window')}: {m.mySlot}</b>
+          <div className="mono" style={{ fontSize: 10.5, opacity: 0.85, marginTop: 2 }}>{t('Preséntate en el hub a esa hora. La ruta se asigna allí.', 'Report to the hub at that time. Your route is assigned there.')}</div>
+        </div>
+      )}
+
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-500)', marginBottom: 6 }}>{t('Elige tu franja de carga', 'Pick your loading window')}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        {m.slots.map((s: any) => {
+          const isMine = m.mySlot === s.start;
+          const disabled = busy || (s.full && !isMine) || (full && !isMine);
+          const on = sel === s.start;
+          return (
+            <button key={s.start} disabled={disabled} onClick={() => setSel(s.start)}
+              style={{ padding: '6px 9px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
+                border: on ? '2px solid var(--brand)' : '1px solid var(--line)',
+                background: on ? 'var(--brand-tint)' : isMine ? 'var(--brand-tint)' : 'var(--surface)',
+                color: disabled ? 'var(--ink-400)' : 'var(--ink-700)', opacity: disabled ? 0.55 : 1 }}>
+              {s.label}
+              <span className="mono" style={{ display: 'block', fontSize: 9.5, fontWeight: 400, opacity: 0.8 }}>{s.accepted}/{s.capacity}{s.full ? ` · ${t('lleno', 'full')}` : ''}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy || !sel || sel === m.mySlot} onClick={accept}>
+          {m.mySlot ? t('Cambiar franja', 'Change window') : t('Reservar franja', 'Book window')}
+        </button>
+        {m.mySlot && <button className="btn btn-ghost" disabled={busy} onClick={withdraw}>{t('Cancelar', 'Withdraw')}</button>}
+      </div>
+    </div>
+  );
+}
+
 function DriverHome({ onLogout }: { onLogout: () => void }) {
   const { t, lang } = useI18n();
   const [offers, setOffers] = useState<any[]>([]);
+  const [massCalls, setMassCalls] = useState<any[]>([]);
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [zones, setZones] = useState<Record<string, any>>({});
   const [toast, setToast] = useState<string | null>(null);
@@ -970,6 +1036,7 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
 
   const load = async () => {
     try { setOffers(await api.myTenders()); } catch { /* ignore */ }
+    try { setMassCalls(await api.myMassTenders()); } catch { /* ignore */ }
     try { setDeliveries(await api.myDeliveries()); } catch { /* ignore */ }
   };
   useEffect(() => {
@@ -980,6 +1047,8 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
     s.on('connect', () => { if (auth?.driverId) s.emit('join', { room: `driver:${auth.driverId}` }); });
     s.on('plan.tender', () => load());
     s.on('plan.tender.cancelled', () => load());
+    s.on('mass.tender', () => load());
+    s.on('mass.tender.cancelled', () => load());
     s.on('delivery.updated', () => load());
     return () => { s.disconnect(); };
   }, []);
@@ -1040,6 +1109,12 @@ function DriverHome({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
         <DaySheet />
+        {massCalls.length > 0 && (
+          <>
+            <div className="eyebrow" style={{ margin: '6px 0 8px' }}>{t('Convocatorias', 'Open calls')} ({massCalls.length})</div>
+            {massCalls.map((m) => <MassCallCard key={m.id} m={m} onChanged={load} flash={flash} />)}
+          </>
+        )}
         <div className="eyebrow" style={{ margin: '6px 0 8px' }}>{t('Ofertas', 'Offers')} ({offers.length})</div>
         {!offers.length && <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 14 }}>{t('No hay ofertas ahora.', 'No offers right now.')}</div>}
         {offers.map((o) => (

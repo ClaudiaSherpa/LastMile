@@ -101,6 +101,10 @@ export const api = {
     return a;
   },
   myTenders: () => aj<any[]>('/driver/plan-tenders'),
+  // ── mass tenders (open calls to the hub) ──
+  myMassTenders: () => aj<any[]>('/driver/mass-tenders'),
+  acceptMassTender: (id: string, slotStart: string) => aj<any>(`/mass-tenders/${id}/accept`, { method: 'POST', body: JSON.stringify({ slotStart }) }),
+  withdrawMassTender: (id: string) => aj<any>(`/mass-tenders/${id}/withdraw`, { method: 'POST' }),
   acceptTender: (id: string) => aj<any>(`/plan-tenders/${id}/accept`, { method: 'POST' }),
   declineTender: (id: string) => aj<any>(`/plan-tenders/${id}/decline`, { method: 'POST' }),
   myDeliveries: () => aj<any[]>('/driver/deliveries'),

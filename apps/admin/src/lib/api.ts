@@ -173,6 +173,18 @@ export const api = {
   createRateCard: (b: any) => request<any>('/rate-cards', { method: 'POST', body: JSON.stringify(b) }),
   updateRateCard: (id: string, b: any) => request<any>(`/rate-cards/${id}`, { method: 'PATCH', body: JSON.stringify(b) }),
   deleteRateCard: (id: string) => request<any>(`/rate-cards/${id}`, { method: 'DELETE' }),
+  // ── mass tenders (open calls to the hub with loading windows) ──
+  massTenders: () => request<any[]>('/mass-tenders'),
+  massTender: (id: string) => request<any>(`/mass-tenders/${id}`),
+  createMassTender: (b: any) => request<any>('/mass-tenders', { method: 'POST', body: JSON.stringify(b) }),
+  openMassTender: (id: string) => request<any>(`/mass-tenders/${id}/open`, { method: 'POST' }),
+  closeMassTender: (id: string) => request<any>(`/mass-tenders/${id}/close`, { method: 'POST' }),
+  cancelMassTender: (id: string) => request<any>(`/mass-tenders/${id}/cancel`, { method: 'POST' }),
+  deleteMassTender: (id: string) => request<any>(`/mass-tenders/${id}`, { method: 'DELETE' }),
+  // ── daily route export (admin + dispatcher) ──
+  daySheetExport: (from: string, to: string, driverId?: string, groupId?: string) =>
+    request<{ from: string; to: string; count: number; totals: any; rows: any[] }>(
+      `/day-sheets/export?from=${from}&to=${to}${driverId ? `&driverId=${driverId}` : ''}${groupId ? `&groupId=${groupId}` : ''}`),
   // ── map layers (admin-managed overlays imported from KML/KMZ) ──
   mapLayers: () => request<{ id: string; slug: string; name: string; color: string; visible: boolean; featureCount: number; features: any[]; createdBy: string | null; createdAt: string }[]>('/map-layers'),
   createMapLayer: (b: { name?: string; color?: string; features: any[]; visible?: boolean }) => request<any>('/map-layers', { method: 'POST', body: JSON.stringify(b) }),

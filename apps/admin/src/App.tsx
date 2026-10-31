@@ -94,6 +94,7 @@ const TABS = [
   ['reviews', 'Revisión docs', 'Doc reviews'],
   ['compliance', 'Cumplimiento', 'Compliance'],
   ['plans', 'Planes', 'Delivery plans'],
+  ['masstenders', 'Convocatorias', 'Open calls'],
   ['drivers', 'Conductores', 'Drivers'],
   ['messages', 'Mensajes', 'Messages'],
   ['users', 'Usuarios', 'Users'],
@@ -110,6 +111,7 @@ const TAB_ROLES: Record<string, string[]> = {
   ratecards: ['admin', 'dispatcher'],
   messages: ['admin', 'dispatcher'],
   plans: ['admin', 'dispatcher'],
+  masstenders: ['admin', 'dispatcher'],
   reviews: ['admin', 'security_officer'],
 };
 
@@ -1143,12 +1145,13 @@ function Shell({ me, onLogout }: { me: any; onLogout: () => void }) {
           <LangToggle />
         </div>
         <div className="scroll" style={{ flex: 1, overflowY: 'auto', padding: isMobile ? 14 : 24 }}>
-          {tab === 'dashboard' && <Dashboard />}
+          {tab === 'dashboard' && <Dashboard role={me?.role} />}
           {tab === 'map' && <LiveMap role={me?.role} />}
           {tab === 'approvals' && <Approvals role={me?.role} />}
           {tab === 'reviews' && <DocumentReviews onChanged={refreshReviewCount} />}
           {tab === 'compliance' && <Compliance />}
           {tab === 'plans' && <DeliveryPlans />}
+          {tab === 'masstenders' && <MassTenders role={me?.role} />}
           {tab === 'drivers' && <Drivers role={me?.role} />}
           {tab === 'messages' && <Messages />}
           {tab === 'users' && <UsersManager />}
@@ -1171,7 +1174,257 @@ function Kpi({ label, value, sub }: { label: string; value: any; sub?: string })
   );
 }
 
-function Dashboard() {
+// Filtered Excel export of daily route details (admin + dispatcher). Builds the
+// workbook client-side with exceljs, fed by GET /day-sheets/export.
+function DailyExport({ role }: { role?: string }) {
+  const { t } = useI18n();
+  const canExport = role === 'admin' || role === 'dispatcher';
+  const [open, setOpen] = useState(false);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+  const [from, setFrom] = useState(weekAgo);
+  const [to, setTo] = useState(today);
+  const [driverId, setDriverId] = useState('');
+  const [groupId, setGroupId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  useEffect(() => { if (open) { api.drivers().then(setDrivers).catch(() => {}); api.driverGroups().then(setGroups).catch(() => {}); } }, [open]);
+  if (!canExport) return null;
+
+  const run = async () => {
+    setBusy(true); setNote('');
+    try {
+      const data = await api.daySheetExport(from, to, driverId || undefined, groupId || undefined);
+      if (!data.rows.length) { setNote(t('Sin datos para ese filtro.', 'No data for that filter.')); setBusy(false); return; }
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Daily routes');
+      ws.columns = [
+        { header: t('Fecha', 'Date'), key: 'date', width: 12 },
+        { header: t('Conductor', 'Driver'), key: 'driver', width: 22 },
+        { header: t('Celular', 'Phone'), key: 'phone', width: 14 },
+        { header: t('Vehículo', 'Vehicle'), key: 'vehicle', width: 10 },
+        { header: t('Placa', 'Plate'), key: 'plate', width: 10 },
+        { header: t('Nivel', 'Tier'), key: 'tier', width: 11 },
+        { header: t('Grupos', 'Groups'), key: 'groups', width: 16 },
+        { header: t('Estado', 'Status'), key: 'status', width: 12 },
+        { header: t('Planeada', 'Planned'), key: 'plannedArrival', width: 9 },
+        { header: t('Llegada hub', 'Hub arrival'), key: 'hubArrival', width: 11 },
+        { header: t('Retraso (min)', 'Late (min)'), key: 'arrivalDeltaMin', width: 11 },
+        { header: t('Salida', 'Departure'), key: 'departure', width: 10 },
+        { header: t('Regreso', 'Return'), key: 'returned', width: 9 },
+        { header: t('Recogidos', 'Picked'), key: 'packagesPicked', width: 10 },
+        { header: t('Entregados', 'Delivered'), key: 'delivered', width: 11 },
+        { header: t('Devueltos', 'Ret. pkgs'), key: 'packagesReturned', width: 11 },
+        { header: t('Éxito %', 'Success %'), key: 'successRate', width: 10 },
+        { header: t('Mi. inicial', 'Start mi'), key: 'startMileage', width: 11 },
+        { header: t('Mi. final', 'End mi'), key: 'endMileage', width: 10 },
+        { header: t('Millaje', 'Mileage'), key: 'mileage', width: 10 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      data.rows.forEach((r: any) => ws.addRow(r));
+      const T = data.totals;
+      const tr = ws.addRow({
+        date: 'TOTAL', driver: `${T.drivers} ${t('conductores', 'drivers')}`, status: `${T.daySheets} ${t('días', 'days')}`,
+        packagesPicked: T.packagesPicked, delivered: T.packagesDelivered, packagesReturned: T.packagesReturned,
+        successRate: T.successRate, mileage: T.mileage,
+      });
+      tr.font = { bold: true };
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `PasarEx-daily-routes-${from}_${to}.xlsx`; a.click(); URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch (e: any) { setNote(e.message || 'Error'); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <button className="btn btn-ghost" style={{ padding: '6px 12px' }} onClick={() => setOpen(true)}>⬇ {t('Exportar Excel', 'Export Excel')}</button>
+      {open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,.3)', display: 'grid', placeItems: 'center', padding: 16 }} onClick={() => !busy && setOpen(false)}>
+          <div className="card" style={{ padding: 20, width: 360, maxWidth: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="eyebrow" style={{ marginBottom: 12 }}>{t('Exportar detalle diario', 'Export daily route detail')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div><label className="field-label">{t('Desde', 'From')}</label><input className="input mono" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+              <div><label className="field-label">{t('Hasta', 'To')}</label><input className="input mono" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+            </div>
+            <label className="field-label" style={{ marginTop: 10 }}>{t('Conductor', 'Driver')}</label>
+            <select className="input" value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+              <option value="">{t('Todos', 'All')}</option>
+              {drivers.map((dd) => <option key={dd.id} value={dd.id}>{dd.name}</option>)}
+            </select>
+            <label className="field-label" style={{ marginTop: 10 }}>{t('Grupo', 'Group')}</label>
+            <select className="input" value={groupId} disabled={!!driverId} onChange={(e) => setGroupId(e.target.value)}>
+              <option value="">{t('Todos', 'All')}</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
+            </select>
+            {driverId && <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 4 }}>{t('El filtro de conductor tiene prioridad sobre el grupo.', 'Driver filter overrides group.')}</div>}
+            {note && <div className="badge badge-red" style={{ marginTop: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy} onClick={() => setOpen(false)}>{t('Cancelar', 'Cancel')}</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={run}>{busy ? '…' : t('Descargar', 'Download')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Mass tenders ("open calls"): no route, drivers pick a hub loading window.
+const massStatusBadge: Record<string, string> = { draft: 'badge-gray', open: 'badge-blue', filled: 'badge-brand', closed: 'badge-gray', cancelled: 'badge-red' };
+function MassTenders({ role }: { role?: string }) {
+  const { t } = useI18n();
+  const canEdit = role === 'admin' || role === 'dispatcher';
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [sel, setSel] = useState<any>(null);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const { connected } = useRoom('ops');
+
+  const load = useCallback(() => { api.massTenders().then((r) => { setRows(r); setSel((s: any) => s ? r.find((x: any) => x.id === s.id) || null : null); }).catch(() => setRows([])); }, []);
+  useEffect(() => { load(); }, [load]);
+  useEvent('mass.tender.accepted', useCallback(() => load(), [load]));
+  useEvent('mass.tender.updated', useCallback(() => load(), [load]));
+
+  const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const blank = { name: '', operationalDate: tomorrow, hubName: 'PasarEx Hub', windowStart: '06:00', windowEnd: '10:00', slotMinutes: 30, maxConcurrent: 3, driversNeeded: 10 };
+  const [form, setForm] = useState<any>(blank);
+  const setF = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+  const toMin = (s: string) => { const [h, m] = (s || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+  const slotCount = Math.max(0, Math.floor((toMin(form.windowEnd) - toMin(form.windowStart)) / (form.slotMinutes || 1)));
+
+  const create = async () => {
+    setBusy(true); setNote('');
+    try {
+      const body = { ...form, slotMinutes: Number(form.slotMinutes), maxConcurrent: Number(form.maxConcurrent), driversNeeded: Number(form.driversNeeded) };
+      const created = await api.createMassTender(body);
+      setCreating(false); setForm(blank); await load(); setSel(created);
+    } catch (e: any) { setNote(e.message); } finally { setBusy(false); }
+  };
+  const act = async (fn: () => Promise<any>) => { setBusy(true); setNote(''); try { await fn(); await load(); } catch (e: any) { setNote(e.message); } finally { setBusy(false); } };
+  const del = async (m: any) => { if (window.confirm(t(`¿Eliminar la convocatoria ${m.reference}?`, `Delete open call ${m.reference}?`))) act(() => api.deleteMassTender(m.id)); };
+
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, minWidth: 300, display: 'grid', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="eyebrow">{t('Convocatorias (llamado abierto al hub)', 'Open calls (report to hub)')}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 99, background: connected ? 'var(--brand)' : 'var(--ink-400)' }} className={connected ? 'live-dot' : ''} />
+            <span className="mono" style={{ color: 'var(--ink-500)' }}>{connected ? 'WS' : '—'}</span>
+          </span>
+          {canEdit && !creating && <button className="btn btn-primary" style={{ padding: '6px 12px' }} onClick={() => { setCreating(true); setSel(null); }}>+ {t('Convocatoria', 'Open call')}</button>}
+        </div>
+
+        {creating && (
+          <div className="card" style={{ padding: 16 }}>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>{t('Nueva convocatoria', 'New open call')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+              <div><label className="field-label">{t('Nombre (opcional)', 'Name (optional)')}</label><input className="input" value={form.name} onChange={(e) => setF('name', e.target.value)} /></div>
+              <div><label className="field-label">{t('Fecha', 'Date')}</label><input className="input mono" type="date" value={form.operationalDate} onChange={(e) => setF('operationalDate', e.target.value)} /></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 6 }}>
+              <div><label className="field-label">{t('Ventana: inicio', 'Window start')}</label><input className="input mono" type="time" value={form.windowStart} onChange={(e) => setF('windowStart', e.target.value)} /></div>
+              <div><label className="field-label">{t('Ventana: fin', 'Window end')}</label><input className="input mono" type="time" value={form.windowEnd} onChange={(e) => setF('windowEnd', e.target.value)} /></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 6 }}>
+              <div><label className="field-label">{t('Franja (min)', 'Slot (min)')}</label><input className="input mono" type="number" value={form.slotMinutes} onChange={(e) => setF('slotMinutes', e.target.value)} /></div>
+              <div><label className="field-label">{t('Máx/franja', 'Max/slot')}</label><input className="input mono" type="number" value={form.maxConcurrent} onChange={(e) => setF('maxConcurrent', e.target.value)} /></div>
+              <div><label className="field-label">{t('Conductores', 'Drivers')}</label><input className="input mono" type="number" value={form.driversNeeded} onChange={(e) => setF('driversNeeded', e.target.value)} /></div>
+            </div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginTop: 8 }}>
+              {slotCount} {t('franjas', 'windows')} × {form.maxConcurrent} = {slotCount * (Number(form.maxConcurrent) || 0)} {t('cupos; se necesitan', 'slots; need')} {form.driversNeeded}
+            </div>
+            {note && <div className="badge badge-red" style={{ marginTop: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setCreating(false); setNote(''); }}>{t('Cancelar', 'Cancel')}</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy || slotCount < 1} onClick={create}>{busy ? '…' : t('Crear borrador', 'Create draft')}</button>
+            </div>
+          </div>
+        )}
+
+        {!rows && <div style={{ color: 'var(--ink-500)' }}>…</div>}
+        {rows && !rows.length && !creating && <div className="card" style={{ padding: 20, color: 'var(--ink-500)' }}>{t('Aún no hay convocatorias.', 'No open calls yet.')}</div>}
+        {rows && rows.map((m) => (
+          <div key={m.id} className="card" style={{ padding: 14, cursor: 'pointer', outline: sel?.id === m.id ? '2px solid var(--brand)' : 'none' }} onClick={() => { setSel(m); setCreating(false); }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontWeight: 700 }}>{m.reference}</span>
+              {m.name && <span style={{ fontSize: 13, color: 'var(--ink-600)' }}>{m.name}</span>}
+              <span className={`badge ${massStatusBadge[m.status] || 'badge-gray'}`}>{m.status}</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{m.operationalDate} · {m.windowStart}–{m.windowEnd}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8, fontSize: 12.5, color: 'var(--ink-600)', flexWrap: 'wrap' }}>
+              <span><b>{m.accepted}</b>/{m.driversNeeded} {t('aceptados', 'accepted')}</span>
+              <span>· {m.slots.length} {t('franjas', 'windows')} × {m.maxConcurrent}</span>
+              <span className="mono" style={{ color: 'var(--ink-400)' }}>· {m.hubName}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {sel && (
+        <div className="card" style={{ width: 340, maxWidth: '100%', flexShrink: 0, padding: 18, position: 'sticky', top: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="mono" style={{ fontWeight: 700 }}>{sel.reference}</span>
+            <span className={`badge ${massStatusBadge[sel.status] || 'badge-gray'}`}>{sel.status}</span>
+            <button className="btn btn-ghost" style={{ marginLeft: 'auto', padding: '2px 8px' }} onClick={() => setSel(null)}>✕</button>
+          </div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--ink-500)', margin: '6px 0 12px' }}>{sel.operationalDate} · {sel.hubName} · {sel.windowStart}–{sel.windowEnd}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: 22, fontWeight: 700 }}>{sel.accepted}</span>
+            <span style={{ color: 'var(--ink-500)' }}>/ {sel.driversNeeded} {t('conductores', 'drivers')}</span>
+          </div>
+          {/* slots */}
+          <div className="eyebrow" style={{ fontSize: 9.5, marginBottom: 6 }}>{t('Franjas de carga', 'Loading windows')}</div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {sel.slots.map((s: any) => (
+              <div key={s.start} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                <span className="mono" style={{ minWidth: 92 }}>{s.label}</span>
+                <div style={{ flex: 1, height: 7, borderRadius: 4, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                  <div style={{ width: `${(s.accepted / s.capacity) * 100}%`, height: '100%', background: s.full ? 'var(--brand)' : 'var(--brand-ink)' }} />
+                </div>
+                <span className="mono" style={{ minWidth: 30, textAlign: 'right', color: s.full ? 'var(--brand-ink)' : 'var(--ink-500)' }}>{s.accepted}/{s.capacity}</span>
+              </div>
+            ))}
+          </div>
+          {/* acceptance list */}
+          {sel.acceptanceList?.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="eyebrow" style={{ fontSize: 9.5, marginBottom: 6 }}>{t('Aceptaron', 'Accepted')}</div>
+              <div style={{ display: 'grid', gap: 4 }}>
+                {sel.acceptanceList.map((a: any) => (
+                  <div key={a.driverId} style={{ display: 'flex', gap: 8, fontSize: 12.5 }}>
+                    <span className="mono" style={{ color: 'var(--brand-ink)', minWidth: 46 }}>{a.slotStart}</span>
+                    <span>{a.driver}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {canEdit && (
+            <>
+              {note && <div className="badge badge-red" style={{ marginTop: 12, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{note}</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                {(sel.status === 'draft' || sel.status === 'closed') && <button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={() => act(() => api.openMassTender(sel.id))}>{t('Abrir', 'Open')}</button>}
+                {(sel.status === 'open' || sel.status === 'filled') && <button className="btn btn-ghost" style={{ flex: 1 }} disabled={busy} onClick={() => act(() => api.closeMassTender(sel.id))}>{t('Cerrar', 'Close')}</button>}
+                {sel.status !== 'cancelled' && <button className="btn btn-ghost" style={{ flex: 1, color: 'var(--red-ink, #d9342b)' }} disabled={busy} onClick={() => act(() => api.cancelMassTender(sel.id))}>{t('Cancelar', 'Cancel')}</button>}
+                <button className="btn btn-ghost" style={{ padding: '6px 10px', color: 'var(--red-ink, #d9342b)' }} disabled={busy} onClick={() => del(sel)}>✕</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Dashboard({ role }: { role?: string }) {
   const { t } = useI18n();
   const [o, setO] = useState<any>(null);
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week');
@@ -1197,6 +1450,7 @@ function Dashboard() {
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
         </select>
         {d && <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{d.start} → {d.end}</span>}
+        <span style={{ marginLeft: d ? 0 : 'auto' }}><DailyExport role={role} /></span>
       </div>
 
       {!d && <div style={{ color: 'var(--ink-500)' }}>…</div>}
