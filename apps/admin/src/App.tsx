@@ -1980,6 +1980,28 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
         <span className="badge badge-amber">{t('No registrada', 'Not recorded')}</span>
       )}
 
+      <div className="eyebrow" style={{ margin: '16px 0 8px' }}>{t('Datos bancarios', 'Banking details')}</div>
+      {docs?.banking?.accountNumber ? (
+        <div style={{ display: 'grid', gap: 5, fontSize: 13 }}>
+          {([
+            [t('Banco', 'Bank'), docs.banking.bankName],
+            [t('Sucursal', 'Branch'), docs.banking.branchAddress],
+            [t('Cuenta', 'Account'), docs.banking.accountNumber],
+            [t('Tipo', 'Type'), docs.banking.accountType === 'savings' ? t('Ahorros', 'Savings') : docs.banking.accountType === 'checking' ? t('Corriente', 'Checking') : docs.banking.accountType],
+            [t('Tránsito', 'Transit'), docs.banking.transitNumber],
+            ['SWIFT', docs.banking.swiftCode],
+          ] as [string, string | null][]).filter(([, v]) => v).map(([l, v]) => (
+            <div key={l} style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--ink-500)' }}>{l}</span>
+              <span className="mono" style={{ fontWeight: 600, textAlign: 'right' }}>{v}</span>
+            </div>
+          ))}
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 2 }}>{t('La cuenta debe estar a nombre del conductor.', 'Account must be in the driver’s name.')}</span>
+        </div>
+      ) : (
+        <span className="badge badge-amber">{t('No registrados', 'Not recorded')}</span>
+      )}
+
       {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
       {editOpen && (
         <DriverEditModal driverId={driverId} onClose={() => setEditOpen(false)}

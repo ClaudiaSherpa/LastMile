@@ -90,6 +90,7 @@ export const api = {
       driver: { name?: string; phone?: string; email?: string; address?: string };
       terms: { acceptedAt: string | null; version: string | null };
       privacy?: { acceptedAt: string | null; version: string | null };
+      banking?: { bankName: string | null; branchAddress: string | null; accountNumber: string | null; accountType: string | null; swiftCode: string | null; transitNumber: string | null };
       documents: { id: string; key: string; name: string; status: string; expiryDate?: string; issueDate?: string; hasFile: boolean }[];
     }>(`/drivers/${id}/documents`),
   driverDayStats: (id: string) => request<any>(`/drivers/${id}/day-stats`),

@@ -260,7 +260,7 @@ function Pending({ app, onReset, onSignIn }: { app: any; onReset: () => void; on
 }
 
 // ── wizard ──────────────────────────────────────────────────────
-const STEPS = 7;
+const STEPS = 8;
 
 function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
   appId: string; token: string; initialDraft: any; onSubmitted: (app: any) => void; onExit: () => void;
@@ -297,6 +297,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
     if (step === 3) return allRequiredUploaded && password.trim().length >= 6;
     if (step === 4) return (draft.zones || []).length > 0;
     if (step === 5) return (draft.days || []).length > 0 && (draft.blocks || []).length > 0;
+    if (step === 6) return draft.bankName && draft.branchAddress && draft.accountNumber && draft.accountType && draft.transitNumber;
     return true;
   };
 
@@ -353,6 +354,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
     [t('Documentos', 'Documents'), t('Súbelos y los leemos con OCR', 'Upload them, we read with OCR')],
     [t('Zonas de operación', 'Operating zones'), t('¿Dónde quieres repartir?', 'Where do you want to operate?')],
     [t('Disponibilidad', 'Availability'), t('Tus días y horarios', 'Your days and hours')],
+    [t('Datos bancarios', 'Banking details'), t('Para depositar tus pagos', 'Where we deposit your pay')],
     [t('Revisa y envía', 'Review & submit'), t('Confirma tu solicitud', 'Confirm your application')],
   ];
 
@@ -499,7 +501,28 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
             </div>
           </>)}
 
-          {step === 6 && (
+          {step === 6 && (<>
+            <div style={{ display: 'flex', gap: 9, padding: 12, background: 'var(--amber-tint, #fdf1d6)', borderRadius: 11, marginBottom: 14 }}>
+              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--amber-ink, #7a5a00)', lineHeight: 1.45 }}>
+                <b>{t('Importante', 'Important')}:</b> {t('La cuenta bancaria debe estar a tu nombre. Aquí depositaremos tus pagos.',
+                   'The bank account must be in your name. This is where we deposit your pay.')}
+              </p>
+            </div>
+            <Field label={t('Nombre del banco', 'Bank name')}><input className="input" value={draft.bankName || ''} onChange={(e) => set({ bankName: e.target.value })} placeholder={t('Ej. Republic Bank', 'e.g. Republic Bank')} /></Field>
+            <Field label={t('Dirección de la sucursal', 'Branch address')}><input className="input" value={draft.branchAddress || ''} onChange={(e) => set({ branchAddress: e.target.value })} placeholder={t('Calle, ciudad', 'Street, city')} /></Field>
+            <Field label={t('Número de cuenta', 'Account number')}><input className="input mono" value={draft.accountNumber || ''} onChange={(e) => set({ accountNumber: e.target.value })} placeholder="—" /></Field>
+            <div className="field-label">{t('Tipo de cuenta', 'Account type')}</div>
+            <div style={{ display: 'flex', gap: 9, marginBottom: 16 }}>
+              {chip(draft.accountType === 'savings', t('Ahorros', 'Savings'), () => set({ accountType: 'savings' }), 'savings')}
+              {chip(draft.accountType === 'checking', t('Corriente', 'Checking'), () => set({ accountType: 'checking' }), 'checking')}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Field label={t('Número de tránsito', 'Transit number')}><input className="input mono" value={draft.transitNumber || ''} onChange={(e) => set({ transitNumber: e.target.value })} placeholder="—" /></Field>
+              <Field label={t('Código SWIFT (opcional)', 'SWIFT code (optional)')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={draft.swiftCode || ''} onChange={(e) => set({ swiftCode: e.target.value })} placeholder="—" /></Field>
+            </div>
+          </>)}
+
+          {step === 7 && (
             <div className="card" style={{ padding: '4px 16px 12px' }}>
               {[
                 [t('Nombre', 'Name'), draft.name || '—'],
@@ -509,6 +532,8 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
                 [t('Documentos', 'Documents'), `${Object.values(draft.docs || {}).filter(Boolean).length} ${t('cargados', 'uploaded')}`],
                 [t('Zonas', 'Zones'), (draft.zones || []).join(', ') || '—'],
                 [t('Disponibilidad', 'Availability'), `${(draft.days || []).length} ${t('días', 'days')} · ${(draft.blocks || []).length} ${t('franjas', 'blocks')}`],
+                [t('Banco', 'Bank'), draft.bankName || '—'],
+                [t('Cuenta', 'Account'), draft.accountNumber ? `${draft.accountNumber} · ${draft.accountType === 'savings' ? t('Ahorros', 'Savings') : draft.accountType === 'checking' ? t('Corriente', 'Checking') : '—'}` : '—'],
               ].map(([l, v], i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '11px 0', borderBottom: '1px solid var(--line-soft)' }}>
                   <span style={{ fontSize: 13.5, color: 'var(--ink-500)' }}>{l}</span>

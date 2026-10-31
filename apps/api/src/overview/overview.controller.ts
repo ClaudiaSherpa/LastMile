@@ -151,6 +151,14 @@ export class OverviewController {
       driver: { name: driver.user?.fullName, phone: driver.user?.phone, email: driver.user?.email, address: driver.address },
       terms: { acceptedAt: draft.termsAcceptedAt ?? null, version: draft.termsVersion ?? null },
       privacy: { acceptedAt: draft.privacyAcceptedAt ?? null, version: draft.privacyVersion ?? null },
+      banking: {
+        bankName: draft.bankName ?? null,
+        branchAddress: draft.branchAddress ?? null,
+        accountNumber: draft.accountNumber ?? null,
+        accountType: draft.accountType ?? null,
+        swiftCode: draft.swiftCode ?? null,
+        transitNumber: draft.transitNumber ?? null,
+      },
       documents: docs.map((d) => ({
         id: d.id,
         key: d.documentType.key,
