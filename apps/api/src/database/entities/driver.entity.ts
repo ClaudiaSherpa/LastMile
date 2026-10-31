@@ -61,6 +61,20 @@ export class DriverProfile {
   @Column({ nullable: true })
   address?: string;
 
+  // banking details for payouts (must be an account in the driver's name)
+  @Column({ nullable: true })
+  bankName?: string;
+  @Column({ nullable: true })
+  branchAddress?: string;
+  @Column({ nullable: true })
+  accountNumber?: string;
+  @Column({ nullable: true })
+  accountType?: string; // 'savings' | 'checking'
+  @Column({ nullable: true })
+  swiftCode?: string;
+  @Column({ nullable: true })
+  transitNumber?: string;
+
   // explicitly-assigned pay rate card (else the default card applies)
   @Column({ type: 'uuid', nullable: true })
   rateCardId?: string;

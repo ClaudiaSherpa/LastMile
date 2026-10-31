@@ -14,6 +14,15 @@ class VehicleDto {
   @IsOptional() year?: number | string;
 }
 
+class BankingDto {
+  @IsOptional() @IsString() bankName?: string;
+  @IsOptional() @IsString() branchAddress?: string;
+  @IsOptional() @IsString() accountNumber?: string;
+  @IsOptional() @IsString() accountType?: string;
+  @IsOptional() @IsString() swiftCode?: string;
+  @IsOptional() @IsString() transitNumber?: string;
+}
+
 class AdminUpdateDriverDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() email?: string;
@@ -21,6 +30,7 @@ class AdminUpdateDriverDto {
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() cedula?: string;
   @IsOptional() @ValidateNested() @Type(() => VehicleDto) vehicle?: VehicleDto;
+  @IsOptional() @ValidateNested() @Type(() => BankingDto) banking?: BankingDto;
   @IsOptional() @IsArray() @IsString({ each: true }) zones?: string[];
   @IsOptional() @IsArray() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) days?: number[];
   @IsOptional() @IsArray() @IsString({ each: true }) blocks?: string[];

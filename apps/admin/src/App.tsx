@@ -1563,6 +1563,69 @@ function DocViewer({ docId, name, onClose }: { docId: string; name: string; onCl
   );
 }
 
+// Export every registration's full onboarding data to Excel (admin only).
+function RegistrationExport({ role }: { role?: string }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  if (role !== 'admin') return null;
+
+  const run = async () => {
+    setBusy(true); setNote('');
+    try {
+      const data = await api.applicationsExport();
+      if (!data.rows.length) { setNote(t('Sin registros', 'No registrations')); setBusy(false); return; }
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Registrations');
+      ws.columns = [
+        { header: t('Referencia', 'Reference'), key: 'reference', width: 12 },
+        { header: t('Estado', 'Status'), key: 'status', width: 12 },
+        { header: t('Enviada', 'Submitted'), key: 'submittedAt', width: 12 },
+        { header: t('Nombre', 'Name'), key: 'name', width: 22 },
+        { header: t('Documento', 'National ID'), key: 'cedula', width: 16 },
+        { header: t('Celular', 'Phone'), key: 'phone', width: 14 },
+        { header: t('Correo', 'Email'), key: 'email', width: 22 },
+        { header: t('Dirección', 'Address'), key: 'address', width: 26 },
+        { header: t('Vehículo', 'Vehicle'), key: 'vehicle', width: 10 },
+        { header: t('Placa', 'Plate'), key: 'plate', width: 10 },
+        { header: t('Marca', 'Make'), key: 'brand', width: 12 },
+        { header: t('Modelo', 'Model'), key: 'model', width: 12 },
+        { header: t('Año', 'Year'), key: 'year', width: 8 },
+        { header: t('Color', 'Color'), key: 'color', width: 10 },
+        { header: t('Zonas', 'Zones'), key: 'zones', width: 20 },
+        { header: t('Días', 'Days'), key: 'days', width: 12 },
+        { header: t('Franjas', 'Blocks'), key: 'blocks', width: 16 },
+        { header: t('Docs', 'Docs'), key: 'documentsUploaded', width: 7 },
+        { header: t('Banco', 'Bank'), key: 'bankName', width: 18 },
+        { header: t('Sucursal', 'Branch'), key: 'branchAddress', width: 22 },
+        { header: t('Cuenta', 'Account #'), key: 'accountNumber', width: 16 },
+        { header: t('Tipo', 'Acct type'), key: 'accountType', width: 11 },
+        { header: t('Tránsito', 'Transit'), key: 'transitNumber', width: 11 },
+        { header: 'SWIFT', key: 'swiftCode', width: 12 },
+        { header: t('Términos v', 'Terms v'), key: 'termsVersion', width: 9 },
+        { header: t('Términos aceptados', 'Terms accepted'), key: 'termsAcceptedAt', width: 20 },
+        { header: t('Privacidad v', 'Privacy v'), key: 'privacyVersion', width: 10 },
+        { header: t('Privacidad aceptada', 'Privacy accepted'), key: 'privacyAcceptedAt', width: 20 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      data.rows.forEach((r: any) => ws.addRow({ ...r, submittedAt: r.submittedAt ? new Date(r.submittedAt).toISOString().slice(0, 10) : '' }));
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `PasarEx-registrations-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click(); URL.revokeObjectURL(url);
+    } catch (e: any) { setNote(e.message || 'Error'); } finally { setBusy(false); }
+  };
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+      {note && <span className="mono" style={{ fontSize: 11, color: 'var(--red-ink, #d9342b)' }}>{note}</span>}
+      <button className="btn btn-ghost" style={{ padding: '6px 12px' }} disabled={busy} onClick={run}>{busy ? '…' : `⬇ ${t('Exportar registros', 'Export registrations')}`}</button>
+    </span>
+  );
+}
+
 function Approvals({ role }: { role?: string }) {
   const { t, lang } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
@@ -1597,6 +1660,12 @@ function Approvals({ role }: { role?: string }) {
 
   return (
     <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {role === 'admin' && (
+        <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="eyebrow">{t('Cola de aprobaciones', 'Approvals queue')}</span>
+          <span style={{ marginLeft: 'auto' }}><RegistrationExport role={role} /></span>
+        </div>
+      )}
       {/* queue */}
       <div style={{ flex: 1, display: 'grid', gap: 12, minWidth: 0 }}>
         {rows.map((a) => (
@@ -2034,13 +2103,14 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
 
   useEffect(() => {
     let live = true;
-    api.getDriver(driverId).then((d) => { if (live) setF({ ...d, vehicle: d.vehicle || {}, zones: d.zones || [], days: d.days || [], blocks: d.blocks || [], rateCardId: d.rateCardId || '' }); }).catch((e) => setErr(e.message));
+    api.getDriver(driverId).then((d) => { if (live) setF({ ...d, vehicle: d.vehicle || {}, zones: d.zones || [], days: d.days || [], blocks: d.blocks || [], rateCardId: d.rateCardId || '', banking: d.banking || {} }); }).catch((e) => setErr(e.message));
     api.zones().then((z) => live && setZones(z)).catch(() => {});
     api.rateCards().then((c) => live && setCards(c)).catch(() => {});
     return () => { live = false; };
   }, [driverId]);
 
   const setV = (k: string, v: any) => setF((p: any) => ({ ...p, vehicle: { ...p.vehicle, [k]: v } }));
+  const setB = (k: string, v: any) => setF((p: any) => ({ ...p, banking: { ...p.banking, [k]: v } }));
   const toggle = (key: 'zones' | 'days' | 'blocks', v: any) => setF((p: any) => {
     const arr = p[key] || [];
     return { ...p, [key]: arr.includes(v) ? arr.filter((x: any) => x !== v) : [...arr, v] };
@@ -2051,7 +2121,7 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
     try {
       await api.updateDriver(driverId, {
         name: f.name, email: f.email, phone: f.phone, address: f.address, cedula: f.cedula,
-        vehicle: f.vehicle, zones: f.zones, days: f.days, blocks: f.blocks,
+        vehicle: f.vehicle, banking: f.banking, zones: f.zones, days: f.days, blocks: f.blocks,
         securityCleared: f.securityCleared, eligible: f.eligible, status: f.status, rateCardId: f.rateCardId || '',
       });
       onSaved();
@@ -2079,6 +2149,23 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
           </div>
           <EField label={t('Documento nacional', 'National ID')}><input className="input mono" value={f.cedula || ''} onChange={(e) => setF({ ...f, cedula: e.target.value })} /></EField>
           <EField label={t('Dirección', 'Address')}><input className="input" value={f.address || ''} onChange={(e) => setF({ ...f, address: e.target.value })} /></EField>
+
+          <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Datos bancarios', 'Banking details')}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--ink-500)', marginBottom: 8 }}>{t('La cuenta debe estar a nombre del conductor.', 'Account must be in the driver’s name.')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <EField label={t('Banco', 'Bank name')}><input className="input" value={f.banking?.bankName || ''} onChange={(e) => setB('bankName', e.target.value)} /></EField>
+            <EField label={t('Sucursal', 'Branch address')}><input className="input" value={f.banking?.branchAddress || ''} onChange={(e) => setB('branchAddress', e.target.value)} /></EField>
+            <EField label={t('Número de cuenta', 'Account number')}><input className="input mono" value={f.banking?.accountNumber || ''} onChange={(e) => setB('accountNumber', e.target.value)} /></EField>
+            <EField label={t('Tipo de cuenta', 'Account type')}>
+              <select className="input" value={f.banking?.accountType || ''} onChange={(e) => setB('accountType', e.target.value)}>
+                <option value="">—</option>
+                <option value="savings">{t('Ahorros', 'Savings')}</option>
+                <option value="checking">{t('Corriente', 'Checking')}</option>
+              </select>
+            </EField>
+            <EField label={t('Número de tránsito', 'Transit number')}><input className="input mono" value={f.banking?.transitNumber || ''} onChange={(e) => setB('transitNumber', e.target.value)} /></EField>
+            <EField label={t('Código SWIFT', 'SWIFT code')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={f.banking?.swiftCode || ''} onChange={(e) => setB('swiftCode', e.target.value)} /></EField>
+          </div>
 
           <div className="eyebrow" style={{ margin: '14px 0 8px' }}>{t('Vehículo', 'Vehicle')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

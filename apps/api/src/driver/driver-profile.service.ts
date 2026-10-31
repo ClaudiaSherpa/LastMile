@@ -12,6 +12,8 @@ export interface UpdateProfileInput {
   address?: string;
   cedula?: string; // admin-only (identity)
   vehicle?: { type?: VehicleType; plate?: string; brand?: string; model?: string; year?: number | string; color?: string };
+  // banking details (editable by the driver and by ops)
+  banking?: { bankName?: string; branchAddress?: string; accountNumber?: string; accountType?: string; swiftCode?: string; transitNumber?: string };
   zones?: string[]; // operating-area slugs
   days?: number[]; // weekday 0=Sun..6=Sat
   blocks?: string[]; // madrugada|manana|tarde|noche
@@ -46,6 +48,14 @@ export class DriverProfileService {
       email: d.user?.email,
       address: d.address,
       cedula: d.cedula,
+      banking: {
+        bankName: d.bankName ?? null,
+        branchAddress: d.branchAddress ?? null,
+        accountNumber: d.accountNumber ?? null,
+        accountType: d.accountType ?? null,
+        swiftCode: d.swiftCode ?? null,
+        transitNumber: d.transitNumber ?? null,
+      },
       status: d.status,
       tier: d.tier,
       score: d.score,
@@ -91,6 +101,16 @@ export class DriverProfileService {
     // driver-profile scalar fields
     let saveDriver = false;
     if (input.address != null) { d.address = input.address; saveDriver = true; }
+    if (input.banking) {
+      const b = input.banking;
+      if (b.bankName != null) d.bankName = b.bankName || (null as any);
+      if (b.branchAddress != null) d.branchAddress = b.branchAddress || (null as any);
+      if (b.accountNumber != null) d.accountNumber = b.accountNumber || (null as any);
+      if (b.accountType != null) d.accountType = b.accountType || (null as any);
+      if (b.swiftCode != null) d.swiftCode = b.swiftCode || (null as any);
+      if (b.transitNumber != null) d.transitNumber = b.transitNumber || (null as any);
+      saveDriver = true;
+    }
     if (admin) {
       if (input.cedula != null) { d.cedula = input.cedula; saveDriver = true; }
       if (typeof input.securityCleared === 'boolean') { d.securityCleared = input.securityCleared; saveDriver = true; }

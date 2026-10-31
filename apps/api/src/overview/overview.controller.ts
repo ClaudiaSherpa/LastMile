@@ -152,12 +152,12 @@ export class OverviewController {
       terms: { acceptedAt: draft.termsAcceptedAt ?? null, version: draft.termsVersion ?? null },
       privacy: { acceptedAt: draft.privacyAcceptedAt ?? null, version: draft.privacyVersion ?? null },
       banking: {
-        bankName: draft.bankName ?? null,
-        branchAddress: draft.branchAddress ?? null,
-        accountNumber: draft.accountNumber ?? null,
-        accountType: draft.accountType ?? null,
-        swiftCode: draft.swiftCode ?? null,
-        transitNumber: draft.transitNumber ?? null,
+        bankName: driver.bankName ?? draft.bankName ?? null,
+        branchAddress: driver.branchAddress ?? draft.branchAddress ?? null,
+        accountNumber: driver.accountNumber ?? draft.accountNumber ?? null,
+        accountType: driver.accountType ?? draft.accountType ?? null,
+        swiftCode: driver.swiftCode ?? draft.swiftCode ?? null,
+        transitNumber: driver.transitNumber ?? draft.transitNumber ?? null,
       },
       documents: docs.map((d) => ({
         id: d.id,
@@ -380,6 +380,54 @@ export class OverviewController {
     };
 
     return { from: fromStr, to: toStr, count: out.length, totals, rows: out };
+  }
+
+  /**
+   * Full export of every registration (application) with all information
+   * captured during onboarding, for the admin Excel export. Admin only, since
+   * it includes identity and banking details.
+   */
+  @Get('applications/export')
+  @Roles(Role.ADMIN)
+  async applicationsExport() {
+    const apps = await this.applications.find({
+      relations: { driver: { user: true } },
+      order: { submittedAt: 'DESC' },
+    });
+    const rows = apps.map((a) => {
+      const d = (a.draft as Record<string, any>) ?? {};
+      return {
+        reference: a.reference,
+        status: a.status,
+        submittedAt: a.submittedAt,
+        name: a.driver?.user?.fullName ?? a.applicantName ?? d.name ?? '',
+        cedula: d.cedula ?? '',
+        phone: a.driver?.user?.phone ?? d.phone ?? '',
+        email: a.driver?.user?.email ?? d.email ?? '',
+        address: d.address ?? '',
+        vehicle: a.vehicleType ?? d.vehicle ?? '',
+        plate: a.plate ?? d.plate ?? '',
+        brand: d.brand ?? '',
+        model: d.model ?? '',
+        year: d.year ?? '',
+        color: d.color ?? '',
+        zones: (a.zones?.length ? a.zones : d.zones ?? []).join(', '),
+        days: (d.days ?? []).join(', '),
+        blocks: (d.blocks ?? []).join(', '),
+        documentsUploaded: Object.values(d.docs ?? {}).filter(Boolean).length,
+        bankName: a.driver?.bankName ?? d.bankName ?? '',
+        branchAddress: a.driver?.branchAddress ?? d.branchAddress ?? '',
+        accountNumber: a.driver?.accountNumber ?? d.accountNumber ?? '',
+        accountType: a.driver?.accountType ?? d.accountType ?? '',
+        transitNumber: a.driver?.transitNumber ?? d.transitNumber ?? '',
+        swiftCode: a.driver?.swiftCode ?? d.swiftCode ?? '',
+        termsVersion: d.termsVersion ?? '',
+        termsAcceptedAt: d.termsAcceptedAt ?? '',
+        privacyVersion: d.privacyVersion ?? '',
+        privacyAcceptedAt: d.privacyAcceptedAt ?? '',
+      };
+    });
+    return { count: rows.length, rows };
   }
 
   @Get('applications')

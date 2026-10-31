@@ -290,27 +290,42 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
   const requiredDocs = docTypes.filter((d) => d.required);
   const allRequiredUploaded = requiredDocs.every((d) => draft.docs?.[d.key]);
 
-  const canNext = () => {
-    if (step === 0) return draft.name && draft.phone && draft.cedula && draft.address;
-    if (step === 1) return !!draft.vehicle;
-    if (step === 2) return draft.plate && draft.brand && draft.year;
-    if (step === 3) return allRequiredUploaded && password.trim().length >= 6;
-    if (step === 4) return (draft.zones || []).length > 0;
-    if (step === 5) return (draft.days || []).length > 0 && (draft.blocks || []).length > 0;
-    if (step === 6) return draft.bankName && draft.branchAddress && draft.accountNumber && draft.accountType && draft.transitNumber;
+  // Per-step completeness. Drivers can move between steps freely even when a
+  // step is incomplete (so they can see everything requested); only Submit on
+  // the last step is gated on every step being complete.
+  const stepComplete = (s: number): boolean => {
+    if (s === 0) return !!(draft.name && draft.phone && draft.cedula && draft.address);
+    if (s === 1) return !!draft.vehicle;
+    if (s === 2) return !!(draft.plate && draft.brand && draft.year);
+    if (s === 3) return allRequiredUploaded && password.trim().length >= 6;
+    if (s === 4) return (draft.zones || []).length > 0;
+    if (s === 5) return (draft.days || []).length > 0 && (draft.blocks || []).length > 0;
+    if (s === 6) return !!(draft.bankName && draft.branchAddress && draft.accountNumber && draft.accountType && draft.transitNumber);
     return true;
   };
+  const isComplete = () => [0, 1, 2, 3, 4, 5, 6].every(stepComplete);
 
   const persist = async (extra: any = {}) => {
     try { await api.patch(appId, token, { ...draft, ...extra, step }); } catch { /* offline tolerated */ }
   };
 
+  // autosave: persist the draft shortly after any change, so partially-entered
+  // information is never lost if the driver steps away mid-registration.
+  useEffect(() => {
+    const id = setTimeout(() => { api.patch(appId, token, { ...draft, step }).catch(() => {}); }, 1200);
+    return () => clearTimeout(id);
+  }, [draft, step]);
+
+  const goTo = async (ns: number) => {
+    setStep(ns);
+    try { await api.patch(appId, token, { ...draft, step: ns }); } catch { /* ignore */ }
+  };
+
   const next = async () => {
     if (step < STEPS - 1) {
-      const ns = step + 1;
-      setStep(ns);
-      try { await api.patch(appId, token, { ...draft, step: ns }); } catch { /* ignore */ }
+      await goTo(step + 1);
     } else {
+      if (!isComplete()) { flash(t('Completa toda la información antes de enviar.', 'Complete all the information before submitting.')); return; }
       setBusy(true);
       try {
         await persist();
@@ -323,7 +338,7 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
       }
     }
   };
-  const back = () => { if (step === 0) onExit(); else setStep(step - 1); };
+  const back = () => { if (step === 0) onExit(); else goTo(step - 1); };
 
   const pickFile = (docKey: string) => { pendingDocKey.current = docKey; fileInput.current?.click(); };
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -522,7 +537,35 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
             </div>
           </>)}
 
-          {step === 7 && (
+          {step === 7 && (<>
+            {/* completeness checklist — tap a section to jump back and finish it */}
+            <div className="card" style={{ padding: '6px 14px', marginBottom: 12 }}>
+              {[
+                t('Datos personales', 'Personal details'),
+                t('Vehículo', 'Vehicle'),
+                t('Características del vehículo', 'Vehicle specs'),
+                t('Documentos y contraseña', 'Documents & password'),
+                t('Zonas de operación', 'Operating zones'),
+                t('Disponibilidad', 'Availability'),
+                t('Datos bancarios', 'Banking details'),
+              ].map((label, i) => {
+                const done = stepComplete(i);
+                return (
+                  <button key={i} onClick={() => goTo(i)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < 6 ? '1px solid var(--line-soft)' : 'none', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 999, flexShrink: 0, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700,
+                      background: done ? 'var(--brand)' : 'var(--amber-tint, #fdf1d6)', color: done ? '#063' : 'var(--amber-ink, #7a5a00)' }}>{done ? '✓' : '!'}</span>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1, color: done ? 'var(--ink-700)' : 'var(--ink-900)' }}>{label}</span>
+                    <span style={{ fontSize: 12, color: done ? 'var(--brand-ink)' : 'var(--amber-ink, #7a5a00)' }}>{done ? t('Completo', 'Complete') : t('Falta', 'Incomplete')} ›</span>
+                  </button>
+                );
+              })}
+            </div>
+            {!isComplete() && (
+              <div style={{ fontSize: 12.5, color: 'var(--amber-ink, #7a5a00)', background: 'var(--amber-tint, #fdf1d6)', borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.45 }}>
+                {t('Completa las secciones marcadas para poder enviar tu solicitud. Tu progreso se guarda automáticamente.',
+                   'Complete the flagged sections to submit your application. Your progress is saved automatically.')}
+              </div>
+            )}
             <div className="card" style={{ padding: '4px 16px 12px' }}>
               {[
                 [t('Nombre', 'Name'), draft.name || '—'],
@@ -545,13 +588,18 @@ function Wizard({ appId, token, initialDraft, onSubmitted, onExit }: {
                    'By submitting, you authorize background verification and document validation.')}
               </p>
             </div>
-          )}
+          </>)}
         </div>
       </div>
 
       {/* footer */}
       <div style={{ padding: '12px 20px', borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
-        <button className="btn btn-primary btn-lg btn-block" disabled={!canNext() || busy} onClick={next}>
+        {step < STEPS - 1 && !stepComplete(step) && (
+          <div style={{ fontSize: 11.5, color: 'var(--ink-500)', textAlign: 'center', marginBottom: 8 }}>
+            {t('Puedes continuar y completar este paso más tarde.', 'You can continue and complete this step later.')}
+          </div>
+        )}
+        <button className="btn btn-primary btn-lg btn-block" disabled={busy || (step === STEPS - 1 && !isComplete())} onClick={next}>
           {busy ? '…' : step === STEPS - 1 ? t('Enviar solicitud', 'Submit application') : t('Continuar', 'Continue')}
         </button>
       </div>
@@ -812,9 +860,10 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => { api.getProfile().then((d) => setP({ ...d, vehicle: d.vehicle || {}, days: d.days || [], blocks: d.blocks || [], zones: d.zones || [] })).catch(() => {}); api.operatingAreas().then(setZones).catch(() => {}); }, []);
+  useEffect(() => { api.getProfile().then((d) => setP({ ...d, vehicle: d.vehicle || {}, days: d.days || [], blocks: d.blocks || [], zones: d.zones || [], banking: d.banking || {} })).catch(() => {}); api.operatingAreas().then(setZones).catch(() => {}); }, []);
 
   const setV = (k: string, v: any) => setP((s: any) => ({ ...s, vehicle: { ...s.vehicle, [k]: v } }));
+  const setB = (k: string, v: any) => setP((s: any) => ({ ...s, banking: { ...s.banking, [k]: v } }));
   const toggle = (key: 'days' | 'blocks' | 'zones', val: any) => setP((s: any) => { const arr = s[key] || []; return { ...s, [key]: arr.includes(val) ? arr.filter((x: any) => x !== val) : [...arr, val] }; });
   const chip = (active: boolean, label: string, onClick: () => void, key: string) => (
     <button key={key} onClick={onClick} style={{ border: '1px solid ' + (active ? 'var(--brand)' : 'var(--line)'), background: active ? 'var(--brand-tint)' : 'var(--surface)', color: active ? 'var(--brand-ink)' : 'var(--ink-700)', borderRadius: 999, padding: '7px 13px', fontSize: 13, fontWeight: 600 }}>{label}</button>
@@ -823,8 +872,8 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
   const save = async () => {
     setBusy(true);
     try {
-      const r = await api.updateProfile({ name: p.name, phone: p.phone, email: p.email, vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones, address: p.address });
-      setP({ ...r, vehicle: r.vehicle || {}, days: r.days || [], blocks: r.blocks || [], zones: r.zones || [] });
+      const r = await api.updateProfile({ name: p.name, phone: p.phone, email: p.email, vehicle: p.vehicle, days: p.days, blocks: p.blocks, zones: p.zones, address: p.address, banking: p.banking });
+      setP({ ...r, vehicle: r.vehicle || {}, days: r.days || [], blocks: r.blocks || [], zones: r.zones || [], banking: r.banking || {} });
       setToast(t('Guardado', 'Saved')); setTimeout(() => setToast(null), 2200);
     } catch (e: any) { setToast(e.message); setTimeout(() => setToast(null), 3000); } finally { setBusy(false); }
   };
@@ -850,6 +899,24 @@ function DriverProfileEdit({ onBack }: { onBack: () => void }) {
           </div>
           <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Dirección', 'Address')}</div>
           <Field label={t('Dirección (según factura de servicios)', 'Address (as on your utility bill)')}><input className="input" value={p.address || ''} onChange={(e) => setP({ ...p, address: e.target.value })} placeholder={t('Calle, ciudad, parroquia', 'Street, city, parish')} /></Field>
+
+          <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Datos bancarios', 'Banking details')}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--amber-ink, #7a5a00)', background: 'var(--amber-tint, #fdf1d6)', borderRadius: 9, padding: '7px 10px', marginBottom: 12, lineHeight: 1.4 }}>
+            {t('La cuenta bancaria debe estar a tu nombre. Aquí depositaremos tus pagos.', 'The bank account must be in your name. This is where we deposit your pay.')}
+          </div>
+          <Field label={t('Nombre del banco', 'Bank name')}><input className="input" value={p.banking?.bankName || ''} onChange={(e) => setB('bankName', e.target.value)} /></Field>
+          <Field label={t('Dirección de la sucursal', 'Branch address')}><input className="input" value={p.banking?.branchAddress || ''} onChange={(e) => setB('branchAddress', e.target.value)} /></Field>
+          <Field label={t('Número de cuenta', 'Account number')}><input className="input mono" value={p.banking?.accountNumber || ''} onChange={(e) => setB('accountNumber', e.target.value)} /></Field>
+          <div className="field-label">{t('Tipo de cuenta', 'Account type')}</div>
+          <div style={{ display: 'flex', gap: 9, marginBottom: 14 }}>
+            {chip(p.banking?.accountType === 'savings', t('Ahorros', 'Savings'), () => setB('accountType', 'savings'), 'savings')}
+            {chip(p.banking?.accountType === 'checking', t('Corriente', 'Checking'), () => setB('accountType', 'checking'), 'checking')}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label={t('Número de tránsito', 'Transit number')}><input className="input mono" value={p.banking?.transitNumber || ''} onChange={(e) => setB('transitNumber', e.target.value)} /></Field>
+            <Field label={t('Código SWIFT (opcional)', 'SWIFT code (optional)')}><input className="input mono" style={{ textTransform: 'uppercase' }} value={p.banking?.swiftCode || ''} onChange={(e) => setB('swiftCode', e.target.value)} /></Field>
+          </div>
+
           <div className="eyebrow" style={{ marginBottom: 8 }}>{t('Vehículo', 'Vehicle')}</div>
           <div style={{ display: 'grid', gap: 11, marginBottom: 8 }}>
             {VEHICLES.map((v) => {

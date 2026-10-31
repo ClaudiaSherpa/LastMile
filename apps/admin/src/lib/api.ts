@@ -182,6 +182,8 @@ export const api = {
   closeMassTender: (id: string) => request<any>(`/mass-tenders/${id}/close`, { method: 'POST' }),
   cancelMassTender: (id: string) => request<any>(`/mass-tenders/${id}/cancel`, { method: 'POST' }),
   deleteMassTender: (id: string) => request<any>(`/mass-tenders/${id}`, { method: 'DELETE' }),
+  // ── registration export: all onboarding data for every driver (admin) ──
+  applicationsExport: () => request<{ count: number; rows: any[] }>('/applications/export'),
   // ── daily route export (admin + dispatcher) ──
   daySheetExport: (from: string, to: string, driverId?: string, groupId?: string) =>
     request<{ from: string; to: string; count: number; totals: any; rows: any[] }>(
