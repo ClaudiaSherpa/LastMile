@@ -460,6 +460,10 @@ function UsersManager() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [created, setCreated] = useState<any>(null);
+  const [pwUser, setPwUser] = useState<any>(null);
+  const [pwValue, setPwValue] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwErr, setPwErr] = useState('');
   const load = () => api.listUsers().then(setRows).catch(() => setRows([]));
   useEffect(() => { load(); }, []);
   const roleLabel = (r: string) => { const m = STAFF_ROLES.find((x) => x[0] === r); return m ? t(m[1], m[2]) : r; };
@@ -479,6 +483,13 @@ function UsersManager() {
     setNote('');
     try { const r = await api.resetUserPassword(u.id); setNote(r.sent ? t('Enlace de restablecimiento enviado por WhatsApp ✓', 'Reset link sent via WhatsApp ✓') : t('Enlace generado (WhatsApp no enviado — revisa la configuración)', 'Link generated (WhatsApp not sent — check config)')); setTimeout(() => setNote(''), 4000); }
     catch (e: any) { setNote(e.message); }
+  };
+  const openSetPw = (u: any) => { setPwUser(u); setPwValue(''); setPwErr(''); };
+  const submitSetPw = async () => {
+    if (pwValue.trim().length < 6) { setPwErr(t('Mínimo 6 caracteres.', 'At least 6 characters.')); return; }
+    setPwBusy(true); setPwErr('');
+    try { await api.setUserPassword(pwUser.id, pwValue.trim()); setPwUser(null); setNote(t('Contraseña actualizada ✓', 'Password updated ✓')); setTimeout(() => setNote(''), 3000); }
+    catch (e: any) { setPwErr(e.message); } finally { setPwBusy(false); }
   };
 
   return (
@@ -531,9 +542,10 @@ function UsersManager() {
                     {u.status === 'pending' && u.inviteUrl && (
                       <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => copy(u.inviteUrl)}>{t('Copiar enlace', 'Copy link')}</button>
                     )}
-                    {u.status === 'active' && (
-                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => resetPw(u)}>{t('Restablecer contraseña', 'Reset password')}</button>
-                    )}
+                    {u.status === 'active' && (<>
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => openSetPw(u)}>{t('Cambiar contraseña', 'Set password')}</button>
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => resetPw(u)}>{t('Enviar enlace', 'Send link')}</button>
+                    </>)}
                     {u.status === 'pending' && (
                       <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12, color: 'var(--red-ink, #d9342b)' }} onClick={() => revoke(u)}>✕</button>
                     )}
@@ -544,6 +556,23 @@ function UsersManager() {
           </table>
         )}
       </div>
+
+      {pwUser && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,.4)', display: 'grid', placeItems: 'center', padding: 16 }} onClick={() => !pwBusy && setPwUser(null)}>
+          <div className="card" style={{ width: 340, maxWidth: '100%', padding: 20 }} onClick={(e) => e.stopPropagation()}>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>{t('Cambiar contraseña', 'Set password')}</div>
+            <div style={{ fontSize: 13, marginBottom: 12 }}>{pwUser.name || pwUser.phone} <span className="mono" style={{ color: 'var(--ink-500)', fontSize: 11 }}>· {pwUser.phone}</span></div>
+            <label className="field-label">{t('Nueva contraseña', 'New password')}</label>
+            <input className="input" type="text" autoComplete="off" value={pwValue} onChange={(e) => setPwValue(e.target.value)} placeholder={t('Mín. 6 caracteres', 'Min. 6 characters')} />
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 6 }}>{t('Compártela con el usuario de forma segura.', 'Share it with the user securely.')}</div>
+            {pwErr && <div className="badge badge-red" style={{ marginTop: 10, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{pwErr}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} disabled={pwBusy} onClick={() => setPwUser(null)}>{t('Cancelar', 'Cancel')}</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} disabled={pwBusy || pwValue.trim().length < 6} onClick={submitSetPw}>{pwBusy ? '…' : t('Guardar', 'Save')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2073,7 +2102,7 @@ function DriverStatsPanel({ driverId, name, sub, role, onClose, onSaved }: { dri
 
       {viewDoc && <DocViewer docId={viewDoc.id} name={viewDoc.name} onClose={() => setViewDoc(null)} />}
       {editOpen && (
-        <DriverEditModal driverId={driverId} onClose={() => setEditOpen(false)}
+        <DriverEditModal driverId={driverId} role={role} onClose={() => setEditOpen(false)}
           onSaved={() => { setEditOpen(false); setReload((x) => x + 1); onSaved?.(); }} />
       )}
     </div>
@@ -2093,9 +2122,12 @@ const BLOCKS: [string, string, string][] = [
 
 // Ops driver-record editor (admin + security officer). Loads the full record,
 // edits contact/vehicle/availability/identity and security flags, then saves.
-function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onClose: () => void; onSaved: () => void }) {
+function DriverEditModal({ driverId, role, onClose, onSaved }: { driverId: string; role?: string; onClose: () => void; onSaved: () => void }) {
   const { t, lang } = useI18n();
   const [f, setF] = useState<any>(null);
+  const [pw, setPw] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwNote, setPwNote] = useState('');
   const [zones, setZones] = useState<any[]>([]);
   const [cards, setCards] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
@@ -2126,6 +2158,13 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
       });
       onSaved();
     } catch (e: any) { setErr(e.message); } finally { setSaving(false); }
+  };
+
+  const savePassword = async () => {
+    if (pw.trim().length < 6) { setPwNote(t('Mínimo 6 caracteres.', 'At least 6 characters.')); return; }
+    setPwBusy(true); setPwNote('');
+    try { await api.setDriverPassword(driverId, pw.trim()); setPw(''); setPwNote(t('Contraseña actualizada ✓', 'Password updated ✓')); }
+    catch (e: any) { setPwNote(e.message); } finally { setPwBusy(false); }
   };
 
   const chip = (on: boolean, label: string, onClick: () => void, key: string) => (
@@ -2218,6 +2257,18 @@ function DriverEditModal({ driverId, onClose, onSaved }: { driverId: string; onC
             <input type="checkbox" checked={!!f.eligible} onChange={(e) => setF({ ...f, eligible: e.target.checked })} />
             {t('Elegible para recibir entregas', 'Eligible for deliveries')}
           </label>
+
+          {role === 'admin' && (
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>{t('Contraseña del conductor', 'Driver password')}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-500)', marginBottom: 8 }}>{t('Ingresa una nueva contraseña (ingreso con celular + contraseña).', 'Set a new password (driver signs in with mobile + password).')}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="input" type="text" autoComplete="off" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('Mín. 6 caracteres', 'Min. 6 characters')} style={{ flex: 1 }} />
+                <button className="btn btn-ghost" disabled={pwBusy || pw.trim().length < 6} onClick={savePassword}>{pwBusy ? '…' : t('Cambiar', 'Set')}</button>
+              </div>
+              {pwNote && <div className={pwNote.includes('✓') ? 'badge badge-blue' : 'badge badge-red'} style={{ marginTop: 8, whiteSpace: 'normal', height: 'auto', padding: 8 }}>{pwNote}</div>}
+            </div>
+          )}
 
           {err && <div className="badge badge-red" style={{ marginTop: 12 }}>{err}</div>}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

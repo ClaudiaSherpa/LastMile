@@ -54,6 +54,19 @@ export class AuthService {
     return { ...r, phone: user.phone };
   }
 
+  /** Admin: set a user's password directly to a typed value (any role). */
+  async setPasswordById(userId: string, password: string): Promise<{ ok: true }> {
+    if (!password || password.length < 6) throw new BadRequestException('Password must be at least 6 characters');
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    user.passwordHash = await argon2.hash(password);
+    user.active = true;
+    user.resetToken = null as any;
+    user.resetTokenExpiresAt = null as any;
+    await this.users.save(user);
+    return { ok: true };
+  }
+
   /** Validate a reset token (for the reset form). */
   async getReset(token: string): Promise<{ ok: true; name: string }> {
     const user = await this.users.findOne({ where: { resetToken: token } });

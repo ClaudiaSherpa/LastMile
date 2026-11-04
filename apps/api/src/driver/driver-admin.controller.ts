@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DriverStatus, Role } from '@sherpa/shared';
 import { Roles } from '../auth/decorators';
@@ -21,6 +21,10 @@ class BankingDto {
   @IsOptional() @IsString() accountType?: string;
   @IsOptional() @IsString() swiftCode?: string;
   @IsOptional() @IsString() transitNumber?: string;
+}
+
+class SetDriverPasswordDto {
+  @IsString() @MinLength(6) password: string;
 }
 
 class AdminUpdateDriverDto {
@@ -59,5 +63,12 @@ export class DriverAdminController {
   @Roles(Role.ADMIN, Role.SECURITY_OFFICER)
   update(@Param('id') id: string, @Body() dto: AdminUpdateDriverDto) {
     return this.svc.adminUpdate(id, dto as any);
+  }
+
+  // Admin sets a driver's login password directly (no WhatsApp link needed).
+  @Post('drivers/:id/set-password')
+  @Roles(Role.ADMIN)
+  setPassword(@Param('id') id: string, @Body() dto: SetDriverPasswordDto) {
+    return this.svc.setPassword(id, dto.password);
   }
 }

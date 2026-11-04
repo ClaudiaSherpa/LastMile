@@ -69,6 +69,8 @@ export const api = {
   getReset: (token: string) => request<{ ok: boolean; name: string }>(`/auth/reset/${token}`),
   resetPassword: (token: string, password: string) => request<any>(`/auth/reset/${token}`, { method: 'POST', body: JSON.stringify({ password }) }),
   resetUserPassword: (id: string) => request<any>(`/users/${id}/reset-password`, { method: 'POST' }),
+  setUserPassword: (id: string, password: string) => request<any>(`/users/${id}/set-password`, { method: 'POST', body: JSON.stringify({ password }) }),
+  setDriverPassword: (id: string, password: string) => request<any>(`/drivers/${id}/set-password`, { method: 'POST', body: JSON.stringify({ password }) }),
   // staff users + invites (admin)
   listUsers: () => request<any[]>('/users'),
   inviteUser: (phone: string, role: string) => request<any>('/users/invite', { method: 'POST', body: JSON.stringify({ phone, role }) }),

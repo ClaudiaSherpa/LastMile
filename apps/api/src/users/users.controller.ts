@@ -15,6 +15,9 @@ class AcceptDto {
   @IsOptional() @IsEmail() email?: string;
   @IsString() @MinLength(6) password: string;
 }
+class SetPasswordDto {
+  @IsString() @MinLength(6) password: string;
+}
 
 @Controller()
 export class UsersController {
@@ -24,6 +27,13 @@ export class UsersController {
   @Roles(Role.ADMIN)
   resetPassword(@Param('id') id: string) {
     return this.auth.requestResetForUser(id);
+  }
+
+  // Admin sets a staff user's password directly (no WhatsApp link needed).
+  @Post('users/:id/set-password')
+  @Roles(Role.ADMIN)
+  setPassword(@Param('id') id: string, @Body() dto: SetPasswordDto) {
+    return this.auth.setPasswordById(id, dto.password);
   }
 
   @Post('users/invite')

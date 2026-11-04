@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import * as argon2 from 'argon2';
 import { DriverStatus, VEHICLE_CAPACITY_KG, VehicleType } from '@sherpa/shared';
 import { AvailabilitySlot, DriverProfile, OperatingArea, User, Vehicle } from '../database/entities';
 
@@ -69,6 +70,17 @@ export class DriverProfileService {
       days: Array.from(new Set((d.availability ?? []).map((s) => s.weekday))).sort((a, b) => a - b),
       blocks: Array.from(new Set((d.availability ?? []).map((s) => s.block))),
     };
+  }
+
+  /** Admin: set the driver's login password directly to a typed value. */
+  async setPassword(driverId: string, password: string) {
+    if (!password || password.length < 6) throw new BadRequestException('Password must be at least 6 characters');
+    const d = await this.drivers.findOne({ where: { id: driverId }, relations: { user: true } });
+    if (!d?.user) throw new NotFoundException('Driver has no user account');
+    d.user.passwordHash = await argon2.hash(password);
+    d.user.active = true;
+    await this.users.save(d.user);
+    return { ok: true };
   }
 
   /** Driver self-service update — personal/contact/vehicle/availability, no security flags. */
