@@ -96,6 +96,59 @@ export class OverviewController {
   }
 
   /**
+   * Full export of every driver's profile (incl. banking details) for the admin
+   * Excel export. Admin only, since it includes identity and banking details.
+   * Optional groupId restricts to a driver group's members.
+   */
+  @Get('drivers-export')
+  @Roles(Role.ADMIN)
+  async driverProfileExport(@Query('groupId') groupId?: string) {
+    let memberIds: string[] | null = null;
+    if (groupId) {
+      memberIds = await this.groups.memberIds(groupId);
+      if (!memberIds.length) return { count: 0, rows: [] };
+    }
+    const list = await this.drivers.find({
+      where: memberIds ? { id: In(memberIds) } : {},
+      relations: { user: true, vehicles: true, operatingAreas: true, availability: true },
+      order: { createdAt: 'ASC' },
+    });
+    const rows = list.map((d) => {
+      const v = d.vehicles?.[0];
+      return {
+        name: d.user?.fullName ?? '',
+        phone: d.user?.phone ?? '',
+        email: d.user?.email ?? '',
+        cedula: d.cedula ?? '',
+        address: d.address ?? '',
+        vehicle: v?.type ?? '',
+        plate: v?.plate ?? '',
+        brand: v?.brand ?? '',
+        model: v?.model ?? '',
+        year: v?.year ?? '',
+        color: v?.color ?? '',
+        tier: d.tier ?? '',
+        status: d.status ?? '',
+        eligible: d.eligible ? 'yes' : 'no',
+        securityCleared: d.securityCleared ? 'yes' : 'no',
+        zones: (d.operatingAreas ?? []).map((a) => a.slug).join(', '),
+        days: Array.from(new Set((d.availability ?? []).map((s) => s.weekday))).sort((a, b) => a - b).join(', '),
+        blocks: Array.from(new Set((d.availability ?? []).map((s) => s.block))).join(', '),
+        deliveries: d.deliveriesCount ?? 0,
+        avgRating: d.avgRating ?? 0,
+        bankName: d.bankName ?? '',
+        branchAddress: d.branchAddress ?? '',
+        accountNumber: d.accountNumber ?? '',
+        accountType: d.accountType ?? '',
+        transitNumber: d.transitNumber ?? '',
+        swiftCode: d.swiftCode ?? '',
+        registeredAt: d.createdAt,
+      };
+    });
+    return { count: rows.length, rows };
+  }
+
+  /**
    * Per-driver delivery breakdown for the map/driver-list detail panel:
    * total ever assigned, delivered, still pending (in-flight), and failed.
    */

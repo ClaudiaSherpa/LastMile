@@ -2699,6 +2699,68 @@ function LiveMap({ role }: { role?: string }) {
   );
 }
 
+// Export every driver's full profile (incl. banking) to Excel (admin only).
+function DriverProfileExport({ role, groupId }: { role?: string; groupId?: string }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  if (role !== 'admin') return null;
+
+  const run = async () => {
+    setBusy(true); setNote('');
+    try {
+      const data = await api.driverProfileExport(groupId);
+      if (!data.rows.length) { setNote(t('Sin conductores', 'No drivers')); setBusy(false); return; }
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Drivers');
+      ws.columns = [
+        { header: t('Nombre', 'Name'), key: 'name', width: 22 },
+        { header: t('Celular', 'Phone'), key: 'phone', width: 14 },
+        { header: t('Correo', 'Email'), key: 'email', width: 22 },
+        { header: t('Documento', 'National ID'), key: 'cedula', width: 16 },
+        { header: t('Dirección', 'Address'), key: 'address', width: 26 },
+        { header: t('Vehículo', 'Vehicle'), key: 'vehicle', width: 10 },
+        { header: t('Placa', 'Plate'), key: 'plate', width: 10 },
+        { header: t('Marca', 'Make'), key: 'brand', width: 12 },
+        { header: t('Modelo', 'Model'), key: 'model', width: 12 },
+        { header: t('Año', 'Year'), key: 'year', width: 8 },
+        { header: t('Color', 'Color'), key: 'color', width: 10 },
+        { header: t('Nivel', 'Tier'), key: 'tier', width: 11 },
+        { header: t('Estado', 'Status'), key: 'status', width: 11 },
+        { header: t('Elegible', 'Eligible'), key: 'eligible', width: 9 },
+        { header: t('Seguridad', 'Security'), key: 'securityCleared', width: 10 },
+        { header: t('Zonas', 'Zones'), key: 'zones', width: 20 },
+        { header: t('Días', 'Days'), key: 'days', width: 12 },
+        { header: t('Franjas', 'Blocks'), key: 'blocks', width: 16 },
+        { header: t('Entregas', 'Deliveries'), key: 'deliveries', width: 10 },
+        { header: 'Rating', key: 'avgRating', width: 8 },
+        { header: t('Banco', 'Bank'), key: 'bankName', width: 18 },
+        { header: t('Sucursal', 'Branch'), key: 'branchAddress', width: 22 },
+        { header: t('Cuenta', 'Account #'), key: 'accountNumber', width: 16 },
+        { header: t('Tipo', 'Acct type'), key: 'accountType', width: 11 },
+        { header: t('Tránsito', 'Transit'), key: 'transitNumber', width: 11 },
+        { header: 'SWIFT', key: 'swiftCode', width: 12 },
+        { header: t('Registrado', 'Registered'), key: 'registeredAt', width: 12 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      data.rows.forEach((r: any) => ws.addRow({ ...r, registeredAt: r.registeredAt ? new Date(r.registeredAt).toISOString().slice(0, 10) : '' }));
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `PasarEx-drivers-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click(); URL.revokeObjectURL(url);
+    } catch (e: any) { setNote(e.message || 'Error'); } finally { setBusy(false); }
+  };
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+      {note && <span className="mono" style={{ fontSize: 11, color: 'var(--red-ink, #d9342b)' }}>{note}</span>}
+      <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: 12.5 }} disabled={busy} onClick={run}>{busy ? '…' : `⬇ ${t('Exportar Excel', 'Export Excel')}`}</button>
+    </span>
+  );
+}
+
 function Drivers({ role }: { role?: string }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
@@ -2727,6 +2789,7 @@ function Drivers({ role }: { role?: string }) {
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.count})</option>)}
           </select>
           <span className="mono" style={{ fontSize: 11, color: 'var(--ink-500)', marginLeft: 'auto' }}>{shown.length} {t('mostrados', 'shown')}</span>
+          <DriverProfileExport role={role} groupId={groupFilter === 'all' ? undefined : groupFilter} />
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>

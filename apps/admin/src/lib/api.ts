@@ -186,6 +186,8 @@ export const api = {
   deleteMassTender: (id: string) => request<any>(`/mass-tenders/${id}`, { method: 'DELETE' }),
   // ── registration export: all onboarding data for every driver (admin) ──
   applicationsExport: () => request<{ count: number; rows: any[] }>('/applications/export'),
+  // ── driver profile export: full roster incl. banking (admin) ──
+  driverProfileExport: (groupId?: string) => request<{ count: number; rows: any[] }>(`/drivers-export${groupId ? `?groupId=${groupId}` : ''}`),
   // ── daily route export (admin + dispatcher) ──
   daySheetExport: (from: string, to: string, driverId?: string, groupId?: string) =>
     request<{ from: string; to: string; count: number; totals: any; rows: any[] }>(
