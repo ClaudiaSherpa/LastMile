@@ -718,16 +718,21 @@ function DaySheet() {
   const [msg, setMsg] = useState<{ type: 'err' | 'warn' | 'ok'; text: string } | null>(null);
   const load = () => api.getDay().then(setDay).catch(() => {});
   useEffect(() => { load(); }, []);
-  const timeOf = (iso?: string) => (iso ? new Date(iso).toTimeString().slice(0, 5) : '');
+  // Barbados (AST, UTC-4, no DST) current date/time, used to prefill check-in.
+  const bdDate = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Barbados' }); // YYYY-MM-DD
+  const bdTime = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Barbados', hour: '2-digit', minute: '2-digit', hour12: false }); // HH:MM
+  const timeOf = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'America/Barbados', hour: '2-digit', minute: '2-digit', hour12: false }) : '');
   useEffect(() => {
     if (!day) return;
     setF({
-      arrival: timeOf(day.depotArrivalAt), picked: day.packagesPicked ?? '', departure: timeOf(day.depotDepartureAt), startKm: day.startMileage ?? '',
+      // prefill the arrival (check-in) time with the current Barbados time — editable
+      arrival: timeOf(day.depotArrivalAt) || bdTime(), picked: day.packagesPicked ?? '', departure: timeOf(day.depotDepartureAt), startKm: day.startMileage ?? '',
       ret: timeOf(day.depotReturnAt), endKm: day.endMileage ?? '', success: day.successfulDeliveries ?? '', returned: day.packagesReturned ?? '',
     });
   }, [day?.operationalDate, day?.exists]);
-  const dateOf = day?.operationalDate || new Date().toISOString().slice(0, 10);
-  const iso = (tm?: string) => (tm ? new Date(`${dateOf}T${tm}:00`).toISOString() : undefined);
+  const dateOf = day?.operationalDate || bdDate();
+  // interpret an entered HH:MM as Barbados local time (UTC-4) regardless of device tz
+  const iso = (tm?: string) => (tm ? new Date(`${dateOf}T${tm}:00-04:00`).toISOString() : undefined);
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v));
   const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
 
